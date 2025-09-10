@@ -4,6 +4,7 @@ import com.example.antixrayai.AntiXrayAI;
 import com.example.antixrayai.data.PlayerRecording;
 import com.example.antixrayai.data.RecordFrame;
 import com.example.antixrayai.data.BlockEvent;
+import com.example.antixrayai.storage.RecordingStorage;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -28,6 +29,7 @@ public class RecordingManager implements Listener {
     private final List<PlayerRecording> completedRecordings = new ArrayList<>();
     private final Map<UUID, List<BlockEvent>> pendingBlockEvents = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Long>> blockBreakingProgress = new ConcurrentHashMap<>();
+    private final RecordingStorage storage;
     
     private final long recordingDuration;
     private final int recordIntervalTicks;
@@ -40,8 +42,33 @@ public class RecordingManager implements Listener {
         this.recordIntervalTicks = plugin.getConfig().getInt("recording.interval-ticks", 2);
         this.maxSavedRecordings = plugin.getConfig().getInt("recording.max-saved", 50);
         
+        // Создаем хранилище записей
+        this.storage = new RecordingStorage(plugin);
+        
+        // Загружаем сохраненные записи
+        loadSavedRecordings();
+        
         // Регистрируем слушатель событий
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
+    }
+    
+    /**
+     * Загрузить сохраненные записи из файлов
+     */
+    private void loadSavedRecordings() {
+        List<PlayerRecording> loaded = storage.loadAllRecordings();
+        completedRecordings.addAll(loaded);
+        
+        // Сортируем по ID в обратном порядке (новые первые)
+        completedRecordings.sort((r1, r2) -> Integer.compare(r2.getId(), r1.getId()));
+        
+        // Ограничиваем количество записей
+        while (completedRecordings.size() > maxSavedRecordings) {
+            PlayerRecording removed = completedRecordings.remove(completedRecordings.size() - 1);
+            storage.deleteRecording(removed.getId());
+        }
+        
+        plugin.getLogger().info("Загружено " + loaded.size() + " записей из хранилища");
     }
     
     /**
@@ -176,9 +203,13 @@ public class RecordingManager implements Listener {
     private void saveRecording(PlayerRecording recording) {
         completedRecordings.add(0, recording); // Добавляем в начало списка
         
+        // Сохраняем в файл
+        storage.saveRecording(recording);
+        
         // Ограничиваем количество сохраненных записей
         while (completedRecordings.size() > maxSavedRecordings) {
-            completedRecordings.remove(completedRecordings.size() - 1);
+            PlayerRecording removed = completedRecordings.remove(completedRecordings.size() - 1);
+            storage.deleteRecording(removed.getId());
         }
     }
     
@@ -228,7 +259,9 @@ public class RecordingManager implements Listener {
      * Удалить запись по ID
      */
     public boolean deleteRecording(int id) {
-        return completedRecordings.removeIf(r -> r.getId() == id);
+        boolean removedFromList = completedRecordings.removeIf(r -> r.getId() == id);
+        boolean removedFromStorage = storage.deleteRecording(id);
+        return removedFromList || removedFromStorage;
     }
     
     /**
