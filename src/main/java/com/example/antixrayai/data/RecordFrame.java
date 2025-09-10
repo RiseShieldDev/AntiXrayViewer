@@ -1,5 +1,8 @@
 package com.example.antixrayai.data;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Представляет один кадр записи движения игрока
  */
@@ -17,6 +20,7 @@ public class RecordFrame {
     private final boolean flying;
     private final double health;
     private final int foodLevel;
+    private final List<BlockEvent> blockEvents;
     
     public RecordFrame(long timestamp, double x, double y, double z,
                       float yaw, float pitch, String world,
@@ -34,6 +38,28 @@ public class RecordFrame {
         this.flying = flying;
         this.health = health;
         this.foodLevel = foodLevel;
+        this.blockEvents = new ArrayList<>();
+    }
+    
+    /**
+     * Добавить событие блока к этому кадру
+     */
+    public void addBlockEvent(BlockEvent event) {
+        blockEvents.add(event);
+    }
+    
+    /**
+     * Получить все события блоков в этом кадре
+     */
+    public List<BlockEvent> getBlockEvents() {
+        return new ArrayList<>(blockEvents);
+    }
+    
+    /**
+     * Проверить, есть ли события блоков в этом кадре
+     */
+    public boolean hasBlockEvents() {
+        return !blockEvents.isEmpty();
     }
     
     // Геттеры

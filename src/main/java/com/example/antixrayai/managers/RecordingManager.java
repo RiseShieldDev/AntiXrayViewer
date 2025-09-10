@@ -3,20 +3,31 @@ package com.example.antixrayai.managers;
 import com.example.antixrayai.AntiXrayAI;
 import com.example.antixrayai.data.PlayerRecording;
 import com.example.antixrayai.data.RecordFrame;
+import com.example.antixrayai.data.BlockEvent;
 import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockDamageEvent;
+import org.bukkit.event.block.BlockDamageAbortEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class RecordingManager {
+public class RecordingManager implements Listener {
     
     private final AntiXrayAI plugin;
     private final Map<UUID, PlayerRecording> recordings = new ConcurrentHashMap<>();
     private final Map<UUID, BukkitTask> recordingTasks = new HashMap<>();
     private final List<PlayerRecording> completedRecordings = new ArrayList<>();
+    private final Map<UUID, RecordFrame> currentFrames = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<String, Long>> blockBreakingProgress = new ConcurrentHashMap<>();
     
     private final long recordingDuration;
     private final int recordIntervalTicks;
@@ -131,6 +142,8 @@ public class RecordingManager {
             player.getFoodLevel()
         );
         
+        // Сохраняем текущий кадр для добавления событий блоков
+        currentFrames.put(player.getUniqueId(), frame);
         recording.addFrame(frame);
     }
     
@@ -210,4 +223,127 @@ public class RecordingManager {
             stopRecording(playerId, "Плагин выключен");
         }
     }
+    
+    // ========== ОБРАБОТЧИКИ СОБЫТИЙ БЛОКОВ ==========
+    
+    /**
+     * Обработка начала ломания блока
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockDamage(BlockDamageEvent event) {
+        Player player = event.getPlayer();
+        if (!isRecording(player)) {
+            return;
+        }
+        
+        Block block = event.getBlock();
+        String blockKey = getBlockKey(block);
+        UUID playerId = player.getUniqueId();
+        
+        // Записываем время начала ломания
+        blockBreakingProgress.computeIfAbsent(playerId, k -> new HashMap<>())
+            .put(blockKey, System.currentTimeMillis());
+        
+        // Добавляем событие начала ломания
+        RecordFrame currentFrame = currentFrames.get(playerId);
+        if (currentFrame != null) {
+            BlockEvent blockEvent = new BlockEvent(
+                System.currentTimeMillis(),
+                BlockEvent.EventType.BREAK_START,
+                block.getX(),
+                block.getY(),
+                block.getZ(),
+                block.getWorld().getName(),
+                block.getType(),
+                0.1f,
+                player.getEntityId()
+            );
+            currentFrame.addBlockEvent(blockEvent);
+        }
+    }
+    
+    /**
+     * Обработка отмены ломания блока
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onBlockDamageAbort(BlockDamageAbortEvent event) {
+        Player player = event.getPlayer();
+        if (!isRecording(player)) {
+            return;
+        }
+        
+        Block block = event.getBlock();
+        String blockKey = getBlockKey(block);
+        UUID playerId = player.getUniqueId();
+        
+        // Удаляем прогресс ломания
+        Map<String, Long> progress = blockBreakingProgress.get(playerId);
+        if (progress != null) {
+            progress.remove(blockKey);
+        }
+        
+        // Добавляем событие отмены ломания
+        RecordFrame currentFrame = currentFrames.get(playerId);
+        if (currentFrame != null) {
+            BlockEvent blockEvent = new BlockEvent(
+                System.currentTimeMillis(),
+                BlockEvent.EventType.BREAK_CANCEL,
+                block.getX(),
+                block.getY(),
+                block.getZ(),
+                block.getWorld().getName(),
+                block.getType()
+            );
+            currentFrame.addBlockEvent(blockEvent);
+        }
+    }
+    
+    /**
+     * Обработка полного ломания блока
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockBreak(BlockBreakEvent event) {
+        Player player = event.getPlayer();
+        if (!isRecording(player)) {
+            return;
+        }
+        
+        Block block = event.getBlock();
+        String blockKey = getBlockKey(block);
+        UUID playerId = player.getUniqueId();
+        
+        // Удаляем прогресс ломания
+        Map<String, Long> progress = blockBreakingProgress.get(playerId);
+        if (progress != null) {
+            progress.remove(blockKey);
+        }
+        
+        // Добавляем событие завершения ломания
+        RecordFrame currentFrame = currentFrames.get(playerId);
+        if (currentFrame != null) {
+            BlockEvent blockEvent = new BlockEvent(
+                System.currentTimeMillis(),
+                BlockEvent.EventType.BREAK_COMPLETE,
+                block.getX(),
+                block.getY(),
+                block.getZ(),
+                block.getWorld().getName(),
+                block.getType(),
+                1.0f,
+                player.getEntityId()
+            );
+            currentFrame.addBlockEvent(blockEvent);
+        }
+    }
+    
+    /**
+     * Создать уникальный ключ для блока
+     */
+    private String getBlockKey(Block block) {
+        return block.getWorld().getName() + ":" +
+               block.getX() + ":" +
+               block.getY() + ":" +
+               block.getZ();
+    }
+    
 }

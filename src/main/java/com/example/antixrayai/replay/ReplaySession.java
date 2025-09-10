@@ -3,12 +3,20 @@ package com.example.antixrayai.replay;
 import com.example.antixrayai.AntiXrayAI;
 import com.example.antixrayai.data.PlayerRecording;
 import com.example.antixrayai.data.RecordFrame;
+import com.example.antixrayai.data.BlockEvent;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Сессия воспроизведения записи для администратора
@@ -23,6 +31,7 @@ public class ReplaySession {
     private Location originalLocation;
     private GameMode originalGameMode;
     private boolean isActive = false;
+    private final Map<String, Integer> activeBlockBreaking = new HashMap<>();
     
     public ReplaySession(AntiXrayAI plugin, Player viewer, PlayerRecording recording) {
         this.plugin = plugin;
@@ -81,6 +90,9 @@ public class ReplaySession {
             replayTask = null;
         }
         
+        // Удаляем все анимации ломания блоков
+        clearAllBlockBreakingAnimations();
+        
         // Возвращаем игрока в исходное состояние
         if (originalLocation != null) {
             viewer.teleport(originalLocation);
@@ -137,9 +149,124 @@ public class ReplaySession {
         // Телепортируем зрителя к позиции из кадра
         teleportToFrame(frame);
         
+        // Обрабатываем события блоков
+        if (frame.hasBlockEvents()) {
+            for (BlockEvent event : frame.getBlockEvents()) {
+                processBlockEvent(event);
+            }
+        }
+        
         // Показываем состояние игрока
         String status = buildStatusString(frame);
         viewer.sendActionBar(status);
+    }
+    
+    /**
+     * Обработать событие блока
+     */
+    private void processBlockEvent(BlockEvent event) {
+        World world = plugin.getServer().getWorld(event.getWorld());
+        if (world == null) {
+            return;
+        }
+        
+        Location blockLoc = new Location(world, event.getX(), event.getY(), event.getZ());
+        String blockKey = getBlockKey(event);
+        
+        switch (event.getType()) {
+            case BREAK_START:
+            case BREAK_PROGRESS:
+                // Показываем анимацию ломания блока
+                sendBlockBreakAnimation(blockLoc, event.getBreakStage());
+                activeBlockBreaking.put(blockKey, event.getBreakStage());
+                break;
+                
+            case BREAK_COMPLETE:
+                // Показываем полное разрушение и частицы
+                sendBlockBreakAnimation(blockLoc, 9);
+                
+                // Показываем частицы разрушения блока
+                Block block = blockLoc.getBlock();
+                if (block != null) {
+                    // Создаем эффект разрушения блока
+                    viewer.sendBlockDamage(blockLoc, 1.0f);
+                    
+                    // Показываем частицы
+                    world.playEffect(blockLoc, org.bukkit.Effect.STEP_SOUND, event.getBlockType());
+                }
+                
+                // Убираем анимацию через небольшую задержку
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        sendBlockBreakAnimation(blockLoc, -1);
+                        activeBlockBreaking.remove(blockKey);
+                    }
+                }.runTaskLater(plugin, 2);
+                break;
+                
+            case BREAK_CANCEL:
+                // Убираем анимацию ломания
+                sendBlockBreakAnimation(blockLoc, -1);
+                activeBlockBreaking.remove(blockKey);
+                break;
+        }
+    }
+    
+    /**
+     * Отправить анимацию ломания блока
+     */
+    private void sendBlockBreakAnimation(Location loc, int stage) {
+        try {
+            // Используем NMS для отправки пакета анимации ломания блока
+            // Это универсальный способ для Paper 1.21.4
+            
+            // Генерируем уникальный ID для анимации на основе координат
+            int entityId = (loc.getBlockX() * 73856093) ^ 
+                          (loc.getBlockY() * 19349663) ^ 
+                          (loc.getBlockZ() * 83492791);
+            
+            // Отправляем блок-дамаж пакет
+            if (stage >= 0 && stage <= 9) {
+                // Показываем анимацию ломания
+                viewer.sendBlockDamage(loc, stage / 9.0f);
+            } else {
+                // Убираем анимацию (stage = -1)
+                viewer.sendBlockDamage(loc, 0.0f);
+            }
+            
+        } catch (Exception e) {
+            plugin.getLogger().warning("Не удалось отправить анимацию ломания блока: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Очистить все анимации ломания блоков
+     */
+    private void clearAllBlockBreakingAnimations() {
+        for (String blockKey : activeBlockBreaking.keySet()) {
+            String[] parts = blockKey.split(":");
+            if (parts.length == 4) {
+                World world = plugin.getServer().getWorld(parts[0]);
+                if (world != null) {
+                    Location loc = new Location(
+                        world,
+                        Integer.parseInt(parts[1]),
+                        Integer.parseInt(parts[2]),
+                        Integer.parseInt(parts[3])
+                    );
+                    sendBlockBreakAnimation(loc, -1);
+                }
+            }
+        }
+        activeBlockBreaking.clear();
+    }
+    
+    /**
+     * Получить ключ блока для хранения
+     */
+    private String getBlockKey(BlockEvent event) {
+        return event.getWorld() + ":" + event.getX() + ":" + event.getY() + ":" + event.getZ();
     }
     
     /**
@@ -180,6 +307,22 @@ public class ReplaySession {
         }
         if (frame.isFlying()) {
             sb.append("§f✈ ");
+        }
+        
+        // Проверяем, есть ли события блоков
+        if (frame.hasBlockEvents()) {
+            boolean hasBreaking = false;
+            for (BlockEvent event : frame.getBlockEvents()) {
+                if (event.getType() == BlockEvent.EventType.BREAK_START ||
+                    event.getType() == BlockEvent.EventType.BREAK_PROGRESS ||
+                    event.getType() == BlockEvent.EventType.BREAK_COMPLETE) {
+                    hasBreaking = true;
+                    break;
+                }
+            }
+            if (hasBreaking) {
+                sb.append("§c⛏ ");
+            }
         }
         
         // Здоровье и еда
@@ -225,13 +368,23 @@ public class ReplaySession {
         int currentSeconds = (currentFrameIndex * 2) / 20; // 2 тика = 0.1 сек
         int totalSeconds = recording.getDurationSeconds();
         
+        // Подсчитываем общее количество событий блоков
+        int blockEventsCount = 0;
+        for (int i = 0; i <= currentFrameIndex && i < totalFrames; i++) {
+            RecordFrame frame = recording.getFrame(i);
+            if (frame != null && frame.hasBlockEvents()) {
+                blockEventsCount += frame.getBlockEvents().size();
+            }
+        }
+        
         String progressText = String.format(
-            "%s §f%d/%d §7(%ds/%ds)",
+            "%s §f%d/%d §7(%ds/%ds) §6⛏ %d",
             progressBar.toString(),
             currentFrameIndex,
             totalFrames,
             currentSeconds,
-            totalSeconds
+            totalSeconds,
+            blockEventsCount
         );
         
         // Отправляем в табlist footer
