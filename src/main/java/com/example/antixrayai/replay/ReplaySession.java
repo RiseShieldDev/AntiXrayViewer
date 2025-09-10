@@ -9,14 +9,15 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Сессия воспроизведения записи для администратора
@@ -32,6 +33,8 @@ public class ReplaySession {
     private GameMode originalGameMode;
     private boolean isActive = false;
     private final Map<String, Integer> activeBlockBreaking = new HashMap<>();
+    private final Map<Location, BlockData> fakeBlocks = new HashMap<>();
+    private final Set<Location> brokenBlocks = new HashSet<>();
     
     public ReplaySession(AntiXrayAI plugin, Player viewer, PlayerRecording recording) {
         this.plugin = plugin;
@@ -63,6 +66,9 @@ public class ReplaySession {
             teleportToFrame(firstFrame);
         }
         
+        // Предварительно сканируем все блоки, которые будут сломаны
+        prescanBlockEvents();
+        
         // Показываем информацию
         viewer.sendTitle(
             "§aВоспроизведение записи",
@@ -72,6 +78,54 @@ public class ReplaySession {
         
         // Запускаем воспроизведение
         startReplayTask();
+    }
+    
+    /**
+     * Предварительное сканирование всех событий блоков для показа фейковых блоков
+     */
+    private void prescanBlockEvents() {
+        Set<String> processedBlocks = new HashSet<>();
+        
+        for (RecordFrame frame : recording.getFrames()) {
+            if (frame.hasBlockEvents()) {
+                for (BlockEvent event : frame.getBlockEvents()) {
+                    if (event.getType() == BlockEvent.EventType.BREAK_COMPLETE) {
+                        World world = plugin.getServer().getWorld(event.getWorld());
+                        if (world != null) {
+                            Location loc = new Location(world, event.getX(), event.getY(), event.getZ());
+                            String blockKey = getLocationKey(loc);
+                            
+                            // Проверяем, не обработали ли мы уже этот блок
+                            if (!processedBlocks.contains(blockKey)) {
+                                processedBlocks.add(blockKey);
+                                
+                                // Получаем текущий блок на этой позиции
+                                Block currentBlock = loc.getBlock();
+                                
+                                // Если блок пустой или отличается от оригинального
+                                if (currentBlock.getType() == Material.AIR || 
+                                    currentBlock.getType() != event.getBlockType()) {
+                                    
+                                    // Создаем BlockData для фейкового блока
+                                    BlockData fakeBlockData = event.getBlockType().createBlockData();
+                                    
+                                    // Отправляем фейковый блок зрителю
+                                    viewer.sendBlockChange(loc, fakeBlockData);
+                                    
+                                    // Сохраняем для последующего восстановления
+                                    fakeBlocks.put(loc, currentBlock.getBlockData());
+                                    
+                                    plugin.getLogger().info("Показан фейковый блок " + event.getBlockType() + 
+                                                          " в позиции " + blockKey);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        viewer.sendMessage("§7Восстановлено блоков для просмотра: §e" + fakeBlocks.size());
     }
     
     /**
@@ -93,6 +147,9 @@ public class ReplaySession {
         // Удаляем все анимации ломания блоков
         clearAllBlockBreakingAnimations();
         
+        // Восстанавливаем реальные блоки для зрителя
+        restoreRealBlocks();
+        
         // Возвращаем игрока в исходное состояние
         if (originalLocation != null) {
             viewer.teleport(originalLocation);
@@ -106,6 +163,24 @@ public class ReplaySession {
         
         // Сообщение об остановке
         viewer.sendMessage("§7Воспроизведение остановлено.");
+    }
+    
+    /**
+     * Восстановить реальные блоки для зрителя
+     */
+    private void restoreRealBlocks() {
+        for (Map.Entry<Location, BlockData> entry : fakeBlocks.entrySet()) {
+            Location loc = entry.getKey();
+            BlockData realBlockData = entry.getValue();
+            
+            // Восстанавливаем реальный блок для зрителя
+            viewer.sendBlockChange(loc, realBlockData);
+        }
+        
+        fakeBlocks.clear();
+        brokenBlocks.clear();
+        
+        plugin.getLogger().info("Восстановлены реальные блоки после просмотра");
     }
     
     /**
@@ -186,13 +261,14 @@ public class ReplaySession {
                 sendBlockBreakAnimation(blockLoc, 9);
                 
                 // Показываем частицы разрушения блока
-                Block block = blockLoc.getBlock();
-                if (block != null) {
-                    // Создаем эффект разрушения блока
-                    viewer.sendBlockDamage(blockLoc, 1.0f);
+                world.playEffect(blockLoc, org.bukkit.Effect.STEP_SOUND, event.getBlockType());
+                
+                // Убираем блок для зрителя (показываем воздух)
+                if (!brokenBlocks.contains(blockLoc)) {
+                    brokenBlocks.add(blockLoc);
+                    viewer.sendBlockChange(blockLoc, Material.AIR.createBlockData());
                     
-                    // Показываем частицы
-                    world.playEffect(blockLoc, org.bukkit.Effect.STEP_SOUND, event.getBlockType());
+                    plugin.getLogger().info("Блок " + event.getBlockType() + " визуально сломан в " + blockKey);
                 }
                 
                 // Убираем анимацию через небольшую задержку
@@ -267,6 +343,16 @@ public class ReplaySession {
      */
     private String getBlockKey(BlockEvent event) {
         return event.getWorld() + ":" + event.getX() + ":" + event.getY() + ":" + event.getZ();
+    }
+    
+    /**
+     * Получить ключ локации для хранения
+     */
+    private String getLocationKey(Location loc) {
+        return loc.getWorld().getName() + ":" + 
+               loc.getBlockX() + ":" + 
+               loc.getBlockY() + ":" + 
+               loc.getBlockZ();
     }
     
     /**
@@ -378,13 +464,14 @@ public class ReplaySession {
         }
         
         String progressText = String.format(
-            "%s §f%d/%d §7(%ds/%ds) §6⛏ %d",
+            "%s §f%d/%d §7(%ds/%ds) §6⛏ %d §e⬜ %d",
             progressBar.toString(),
             currentFrameIndex,
             totalFrames,
             currentSeconds,
             totalSeconds,
-            blockEventsCount
+            blockEventsCount,
+            fakeBlocks.size()
         );
         
         // Отправляем в табlist footer
