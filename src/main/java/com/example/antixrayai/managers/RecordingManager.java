@@ -26,7 +26,7 @@ public class RecordingManager implements Listener {
     private final Map<UUID, PlayerRecording> recordings = new ConcurrentHashMap<>();
     private final Map<UUID, BukkitTask> recordingTasks = new HashMap<>();
     private final List<PlayerRecording> completedRecordings = new ArrayList<>();
-    private final Map<UUID, RecordFrame> currentFrames = new ConcurrentHashMap<>();
+    private final Map<UUID, List<BlockEvent>> pendingBlockEvents = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Long>> blockBreakingProgress = new ConcurrentHashMap<>();
     
     private final long recordingDuration;
@@ -39,6 +39,9 @@ public class RecordingManager implements Listener {
         this.recordingDuration = plugin.getConfig().getInt("recording.duration", 180) * 1000L;
         this.recordIntervalTicks = plugin.getConfig().getInt("recording.interval-ticks", 2);
         this.maxSavedRecordings = plugin.getConfig().getInt("recording.max-saved", 50);
+        
+        // Регистрируем слушатель событий
+        plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
     
     /**
@@ -104,6 +107,10 @@ public class RecordingManager implements Listener {
             task.cancel();
         }
         
+        // Очищаем буферы событий
+        pendingBlockEvents.remove(playerId);
+        blockBreakingProgress.remove(playerId);
+        
         if (recording != null) {
             recording.setEndTime(System.currentTimeMillis());
             recording.setEndReason(endReason);
@@ -111,9 +118,17 @@ public class RecordingManager implements Listener {
             // Сохраняем запись
             saveRecording(recording);
             
+            // Подсчитываем общее количество событий блоков
+            int totalBlockEvents = 0;
+            for (RecordFrame frame : recording.getFrames()) {
+                if (frame.hasBlockEvents()) {
+                    totalBlockEvents += frame.getBlockEvents().size();
+                }
+            }
+            
             plugin.getLogger().info(String.format(
-                "Остановлена запись игрока %s. Причина: %s. Записано кадров: %d",
-                recording.getPlayerName(), endReason, recording.getFrames().size()
+                "Остановлена запись игрока %s. Причина: %s. Записано кадров: %d, событий блоков: %d",
+                recording.getPlayerName(), endReason, recording.getFrames().size(), totalBlockEvents
             ));
             
             // Уведомляем администраторов
@@ -142,8 +157,16 @@ public class RecordingManager implements Listener {
             player.getFoodLevel()
         );
         
-        // Сохраняем текущий кадр для добавления событий блоков
-        currentFrames.put(player.getUniqueId(), frame);
+        // Добавляем накопленные события блоков к кадру
+        UUID playerId = player.getUniqueId();
+        List<BlockEvent> events = pendingBlockEvents.remove(playerId);
+        if (events != null && !events.isEmpty()) {
+            for (BlockEvent event : events) {
+                frame.addBlockEvent(event);
+            }
+            plugin.getLogger().info("Добавлено " + events.size() + " событий блоков к кадру");
+        }
+        
         recording.addFrame(frame);
     }
     
@@ -244,22 +267,21 @@ public class RecordingManager implements Listener {
         blockBreakingProgress.computeIfAbsent(playerId, k -> new HashMap<>())
             .put(blockKey, System.currentTimeMillis());
         
-        // Добавляем событие начала ломания
-        RecordFrame currentFrame = currentFrames.get(playerId);
-        if (currentFrame != null) {
-            BlockEvent blockEvent = new BlockEvent(
-                System.currentTimeMillis(),
-                BlockEvent.EventType.BREAK_START,
-                block.getX(),
-                block.getY(),
-                block.getZ(),
-                block.getWorld().getName(),
-                block.getType(),
-                0.1f,
-                player.getEntityId()
-            );
-            currentFrame.addBlockEvent(blockEvent);
-        }
+        // Добавляем событие начала ломания в буфер
+        BlockEvent blockEvent = new BlockEvent(
+            System.currentTimeMillis(),
+            BlockEvent.EventType.BREAK_START,
+            block.getX(),
+            block.getY(),
+            block.getZ(),
+            block.getWorld().getName(),
+            block.getType(),
+            0.1f,
+            player.getEntityId()
+        );
+        
+        pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
+        plugin.getLogger().info("Записано событие BREAK_START для блока " + block.getType() + " в " + blockKey);
     }
     
     /**
@@ -282,20 +304,19 @@ public class RecordingManager implements Listener {
             progress.remove(blockKey);
         }
         
-        // Добавляем событие отмены ломания
-        RecordFrame currentFrame = currentFrames.get(playerId);
-        if (currentFrame != null) {
-            BlockEvent blockEvent = new BlockEvent(
-                System.currentTimeMillis(),
-                BlockEvent.EventType.BREAK_CANCEL,
-                block.getX(),
-                block.getY(),
-                block.getZ(),
-                block.getWorld().getName(),
-                block.getType()
-            );
-            currentFrame.addBlockEvent(blockEvent);
-        }
+        // Добавляем событие отмены ломания в буфер
+        BlockEvent blockEvent = new BlockEvent(
+            System.currentTimeMillis(),
+            BlockEvent.EventType.BREAK_CANCEL,
+            block.getX(),
+            block.getY(),
+            block.getZ(),
+            block.getWorld().getName(),
+            block.getType()
+        );
+        
+        pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
+        plugin.getLogger().info("Записано событие BREAK_CANCEL для блока " + block.getType());
     }
     
     /**
@@ -318,22 +339,21 @@ public class RecordingManager implements Listener {
             progress.remove(blockKey);
         }
         
-        // Добавляем событие завершения ломания
-        RecordFrame currentFrame = currentFrames.get(playerId);
-        if (currentFrame != null) {
-            BlockEvent blockEvent = new BlockEvent(
-                System.currentTimeMillis(),
-                BlockEvent.EventType.BREAK_COMPLETE,
-                block.getX(),
-                block.getY(),
-                block.getZ(),
-                block.getWorld().getName(),
-                block.getType(),
-                1.0f,
-                player.getEntityId()
-            );
-            currentFrame.addBlockEvent(blockEvent);
-        }
+        // Добавляем событие завершения ломания в буфер
+        BlockEvent blockEvent = new BlockEvent(
+            System.currentTimeMillis(),
+            BlockEvent.EventType.BREAK_COMPLETE,
+            block.getX(),
+            block.getY(),
+            block.getZ(),
+            block.getWorld().getName(),
+            block.getType(),
+            1.0f,
+            player.getEntityId()
+        );
+        
+        pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
+        plugin.getLogger().info("Записано событие BREAK_COMPLETE для блока " + block.getType() + " в " + blockKey);
     }
     
     /**
