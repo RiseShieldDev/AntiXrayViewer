@@ -114,9 +114,6 @@ public class ReplaySession {
                                     
                                     // Сохраняем для последующего восстановления
                                     fakeBlocks.put(loc, currentBlock.getBlockData());
-                                    
-                                    plugin.getLogger().info("Показан фейковый блок " + event.getBlockType() + 
-                                                          " в позиции " + blockKey);
                                 }
                             }
                         }
@@ -179,8 +176,6 @@ public class ReplaySession {
         
         fakeBlocks.clear();
         brokenBlocks.clear();
-        
-        plugin.getLogger().info("Восстановлены реальные блоки после просмотра");
     }
     
     /**
@@ -267,8 +262,6 @@ public class ReplaySession {
                 if (!brokenBlocks.contains(blockLoc)) {
                     brokenBlocks.add(blockLoc);
                     viewer.sendBlockChange(blockLoc, Material.AIR.createBlockData());
-                    
-                    plugin.getLogger().info("Блок " + event.getBlockType() + " визуально сломан в " + blockKey);
                 }
                 
                 // Убираем анимацию через небольшую задержку

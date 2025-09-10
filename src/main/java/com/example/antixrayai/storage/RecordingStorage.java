@@ -52,9 +52,6 @@ public class RecordingStorage {
             // Конвертируем запись в JSON
             RecordingData data = RecordingData.fromRecording(recording);
             gson.toJson(data, writer);
-            
-            plugin.getLogger().info("Запись #" + recording.getId() + 
-                                  " сохранена в файл: " + file.getName());
             return true;
             
         } catch (IOException e) {
@@ -101,10 +98,7 @@ public class RecordingStorage {
             
             RecordingData data = gson.fromJson(reader, RecordingData.class);
             if (data != null) {
-                PlayerRecording recording = data.toRecording();
-                plugin.getLogger().info("Загружена запись #" + recording.getId() + 
-                                      " из файла: " + file.getName());
-                return recording;
+                return data.toRecording();
             }
             
         } catch (IOException | JsonSyntaxException e) {
@@ -122,11 +116,7 @@ public class RecordingStorage {
         File file = new File(recordingsFolder, "recording-" + recordingId + ".json");
         
         if (file.exists()) {
-            boolean deleted = file.delete();
-            if (deleted) {
-                plugin.getLogger().info("Удален файл записи #" + recordingId);
-            }
-            return deleted;
+            return file.delete();
         }
         
         return false;

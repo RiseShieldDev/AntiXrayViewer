@@ -62,16 +62,8 @@ public class OreBreakListener implements Listener {
         // Увеличиваем соответствующий счетчик
         if (type == Material.DIAMOND_ORE || type == Material.DEEPSLATE_DIAMOND_ORE) {
             data.diamondCount++;
-            plugin.getLogger().info(String.format(
-                "Игрок %s сломал алмазную руду (всего: %d подряд)",
-                player.getName(), data.diamondCount
-            ));
         } else if (type == Material.ANCIENT_DEBRIS) {
             data.netheriteCount++;
-            plugin.getLogger().info(String.format(
-                "Игрок %s сломал древние обломки (всего: %d подряд)",
-                player.getName(), data.netheriteCount
-            ));
         }
         
         // Проверяем, не превышен ли порог

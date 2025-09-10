@@ -191,7 +191,6 @@ public class RecordingManager implements Listener {
             for (BlockEvent event : events) {
                 frame.addBlockEvent(event);
             }
-            plugin.getLogger().info("Добавлено " + events.size() + " событий блоков к кадру");
         }
         
         recording.addFrame(frame);
@@ -314,7 +313,6 @@ public class RecordingManager implements Listener {
         );
         
         pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
-        plugin.getLogger().info("Записано событие BREAK_START для блока " + block.getType() + " в " + blockKey);
     }
     
     /**
@@ -349,7 +347,6 @@ public class RecordingManager implements Listener {
         );
         
         pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
-        plugin.getLogger().info("Записано событие BREAK_CANCEL для блока " + block.getType());
     }
     
     /**
@@ -386,7 +383,6 @@ public class RecordingManager implements Listener {
         );
         
         pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
-        plugin.getLogger().info("Записано событие BREAK_COMPLETE для блока " + block.getType() + " в " + blockKey);
     }
     
     /**
