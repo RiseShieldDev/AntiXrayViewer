@@ -1,0 +1,36 @@
+name: AntiXrayAI
+version: '${version}'
+main: com.example.antixrayai.AntiXrayAI
+api-version: '1.21'
+authors: [NikitaRTN]
+description: AntiXray AI plugin for Paper 1.21.4
+website: https://github.com/NikitaRTN/AntiXrayAI
+
+commands:
+  antixrayai:
+    description: Main command for AntiXrayAI plugin
+    usage: /<command> [help]
+    aliases: [axai, antixray]
+    permission: antixrayai.use
+    permission-message: You don't have permission to use this command!
+
+permissions:
+  antixrayai.*:
+    description: Gives access to all AntiXrayAI commands
+    default: op
+    children:
+      antixrayai.use: true
+      antixrayai.admin: true
+      antixrayai.reload: true
+  
+  antixrayai.use:
+    description: Allows using basic AntiXrayAI commands
+    default: true
+  
+  antixrayai.admin:
+    description: Allows using admin AntiXrayAI commands
+    default: op
+  
+  antixrayai.reload:
+    description: Allows reloading the plugin configuration
+    default: op
