@@ -66,18 +66,37 @@ public class ReplaySession {
             teleportToFrame(firstFrame);
         }
         
-        // Предварительно сканируем все блоки, которые будут сломаны
-        prescanBlockEvents();
-        
-        // Показываем информацию
+        // Показываем информацию о загрузке
         viewer.sendTitle(
-            "§aВоспроизведение записи",
-            "§7Игрок: §f" + recording.getPlayerName(),
-            10, 70, 20
+            "§eЗагрузка записи...",
+            "§7Подготовка блоков",
+            10, 40, 10
         );
         
-        // Запускаем воспроизведение
-        startReplayTask();
+        // Задержка для загрузки чанков и затем сканирование блоков
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                // Предварительно сканируем все блоки, которые будут сломаны
+                prescanBlockEvents();
+                
+                // Еще одна небольшая задержка для отправки пакетов
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        // Показываем информацию о начале воспроизведения
+                        viewer.sendTitle(
+                            "§aВоспроизведение записи",
+                            "§7Игрок: §f" + recording.getPlayerName(),
+                            10, 70, 20
+                        );
+                        
+                        // Запускаем воспроизведение
+                        startReplayTask();
+                    }
+                }.runTaskLater(plugin, 10); // 0.5 секунды дополнительно
+            }
+        }.runTaskLater(plugin, 20); // 1 секунда задержки для загрузки чанков
     }
     
     /**
@@ -85,6 +104,8 @@ public class ReplaySession {
      */
     private void prescanBlockEvents() {
         Set<String> processedBlocks = new HashSet<>();
+        int restoredCount = 0;
+        int skippedCount = 0;
         
         for (RecordFrame frame : recording.getFrames()) {
             if (frame.hasBlockEvents()) {
@@ -99,21 +120,37 @@ public class ReplaySession {
                             if (!processedBlocks.contains(blockKey)) {
                                 processedBlocks.add(blockKey);
                                 
+                                // Убеждаемся, что чанк загружен
+                                if (!loc.getChunk().isLoaded()) {
+                                    loc.getChunk().load();
+                                }
+                                
                                 // Получаем текущий блок на этой позиции
                                 Block currentBlock = loc.getBlock();
                                 
                                 // Если блок пустой или отличается от оригинального
-                                if (currentBlock.getType() == Material.AIR || 
+                                if (currentBlock.getType() == Material.AIR ||
                                     currentBlock.getType() != event.getBlockType()) {
                                     
                                     // Создаем BlockData для фейкового блока
                                     BlockData fakeBlockData = event.getBlockType().createBlockData();
                                     
-                                    // Отправляем фейковый блок зрителю
-                                    viewer.sendBlockChange(loc, fakeBlockData);
-                                    
-                                    // Сохраняем для последующего восстановления
+                                    // Сохраняем реальное состояние блока
                                     fakeBlocks.put(loc, currentBlock.getBlockData());
+                                    
+                                    // Отправляем фейковый блок зрителю с небольшой задержкой
+                                    // для каждой группы блоков
+                                    final int currentBatch = restoredCount / 10; // Группы по 10 блоков
+                                    new BukkitRunnable() {
+                                        @Override
+                                        public void run() {
+                                            viewer.sendBlockChange(loc, fakeBlockData);
+                                        }
+                                    }.runTaskLater(plugin, currentBatch * 2L); // Задержка между группами
+                                    
+                                    restoredCount++;
+                                } else {
+                                    skippedCount++;
                                 }
                             }
                         }
@@ -122,7 +159,46 @@ public class ReplaySession {
             }
         }
         
-        viewer.sendMessage("§7Восстановлено блоков для просмотра: §e" + fakeBlocks.size());
+        viewer.sendMessage(String.format("§7Восстановлено блоков: §e%d§7, пропущено: §8%d",
+                                        restoredCount, skippedCount));
+        
+        // Повторная отправка всех блоков через секунду для надежности
+        if (!fakeBlocks.isEmpty()) {
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    for (Map.Entry<Location, BlockData> entry : fakeBlocks.entrySet()) {
+                        Location loc = entry.getKey();
+                        // Получаем материал блока из события
+                        Material blockMaterial = getBlockMaterialAtLocation(loc);
+                        if (blockMaterial != null && blockMaterial != Material.AIR) {
+                            viewer.sendBlockChange(loc, blockMaterial.createBlockData());
+                        }
+                    }
+                    viewer.sendMessage("§7Блоки обновлены повторно для надежности");
+                }
+            }.runTaskLater(plugin, 40L); // 2 секунды после начала
+        }
+    }
+    
+    /**
+     * Получить материал блока из записанных событий для конкретной локации
+     */
+    private Material getBlockMaterialAtLocation(Location loc) {
+        for (RecordFrame frame : recording.getFrames()) {
+            if (frame.hasBlockEvents()) {
+                for (BlockEvent event : frame.getBlockEvents()) {
+                    if (event.getType() == BlockEvent.EventType.BREAK_COMPLETE &&
+                        event.getWorld().equals(loc.getWorld().getName()) &&
+                        event.getX() == loc.getBlockX() &&
+                        event.getY() == loc.getBlockY() &&
+                        event.getZ() == loc.getBlockZ()) {
+                        return event.getBlockType();
+                    }
+                }
+            }
+        }
+        return null;
     }
     
     /**
@@ -261,7 +337,16 @@ public class ReplaySession {
                 // Убираем блок для зрителя (показываем воздух)
                 if (!brokenBlocks.contains(blockLoc)) {
                     brokenBlocks.add(blockLoc);
+                    // Отправляем воздух несколько раз для надежности
                     viewer.sendBlockChange(blockLoc, Material.AIR.createBlockData());
+                    
+                    // Повторная отправка через 1 тик
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            viewer.sendBlockChange(blockLoc, Material.AIR.createBlockData());
+                        }
+                    }.runTaskLater(plugin, 1);
                 }
                 
                 // Убираем анимацию через небольшую задержку
@@ -298,7 +383,18 @@ public class ReplaySession {
             // Отправляем блок-дамаж пакет
             if (stage >= 0 && stage <= 9) {
                 // Показываем анимацию ломания
-                viewer.sendBlockDamage(loc, stage / 9.0f);
+                float damage = stage / 9.0f;
+                viewer.sendBlockDamage(loc, damage);
+                
+                // Для последнего этапа (полное разрушение) отправляем дважды
+                if (stage == 9) {
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            viewer.sendBlockDamage(loc, 1.0f);
+                        }
+                    }.runTaskLater(plugin, 1);
+                }
             } else {
                 // Убираем анимацию (stage = -1)
                 viewer.sendBlockDamage(loc, 0.0f);
