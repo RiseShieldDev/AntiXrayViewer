@@ -234,6 +234,10 @@ public class ReplaySession {
         // Очищаем title
         viewer.resetTitle();
         
+        // Очищаем TAB-лист (header и footer)
+        viewer.setPlayerListHeader("");
+        viewer.setPlayerListFooter("");
+        
         // Сообщение об остановке
         viewer.sendMessage("§7Воспроизведение остановлено.");
     }
