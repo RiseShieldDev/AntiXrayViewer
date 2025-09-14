@@ -4,6 +4,10 @@ import com.example.antixrayai.AntiXrayAI;
 import com.example.antixrayai.data.PlayerRecording;
 import com.example.antixrayai.managers.RecordingManager;
 import com.example.antixrayai.replay.ReplaySession;
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.ComponentBuilder;
+import net.md_5.bungee.api.chat.HoverEvent;
+import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -20,6 +24,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
     private final RecordingManager recordingManager;
     private final Map<UUID, ReplaySession> replaySessions = new HashMap<>();
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM HH:mm:ss");
+    private static final int RECORDINGS_PER_PAGE = 8; // Количество записей на странице
     
     public AntiXrayCommand(AntiXrayAI plugin, RecordingManager recordingManager) {
         this.plugin = plugin;
@@ -47,7 +52,16 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         
         switch (args[0].toLowerCase()) {
             case "list":
-                handleList(player);
+                int page = 1;
+                if (args.length > 1) {
+                    try {
+                        page = Integer.parseInt(args[1]);
+                    } catch (NumberFormatException e) {
+                        player.sendMessage("§cНеверный номер страницы!");
+                        return true;
+                    }
+                }
+                handleList(player, page);
                 break;
                 
             case "view":
@@ -85,34 +99,141 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         return true;
     }
     
-    private void handleList(Player player) {
-        List<PlayerRecording> recordings = recordingManager.getCompletedRecordings();
+    private void handleList(Player player, int page) {
+        List<PlayerRecording> allRecordings = recordingManager.getCompletedRecordings();
         
-        if (recordings.isEmpty()) {
+        if (allRecordings.isEmpty()) {
             player.sendMessage("§7Нет сохраненных записей.");
             return;
         }
         
-        player.sendMessage("§6═══════════ §eЗаписи AntiXrayAI §6═══════════");
+        // Сортируем записи от новых к старым (по ID в обратном порядке)
+        List<PlayerRecording> sortedRecordings = new ArrayList<>(allRecordings);
+        sortedRecordings.sort((r1, r2) -> Integer.compare(r2.getId(), r1.getId()));
         
-        for (PlayerRecording recording : recordings) {
+        // Вычисляем пагинацию
+        int totalRecordings = sortedRecordings.size();
+        int totalPages = (int) Math.ceil((double) totalRecordings / RECORDINGS_PER_PAGE);
+        
+        // Проверяем корректность страницы
+        if (page < 1) page = 1;
+        if (page > totalPages) page = totalPages;
+        
+        // Вычисляем индексы для текущей страницы
+        int startIndex = (page - 1) * RECORDINGS_PER_PAGE;
+        int endIndex = Math.min(startIndex + RECORDINGS_PER_PAGE, totalRecordings);
+        
+        // Заголовок с номером страницы
+        player.sendMessage(String.format("§6═══════ §eЗаписи AntiXrayAI §7[§f%d§7/§f%d§7] §6═══════", page, totalPages));
+        
+        // Отображаем записи текущей страницы
+        for (int i = startIndex; i < endIndex; i++) {
+            PlayerRecording recording = sortedRecordings.get(i);
             Date date = new Date(recording.getStartTime());
             String status = recording.getFrameCount() > 0 ? "§a✓" : "§c✗";
             
-            player.sendMessage(String.format(
-                "%s §7#§b%d §7| §f%s §7| %s §7| Кадров: §e%d §7| §f%ds",
-                status,
-                recording.getId(),
+            // Создаем кликабельный ID для быстрого просмотра
+            TextComponent idComponent = new TextComponent(String.format("%s §7#§b%d", status, recording.getId()));
+            idComponent.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axai view " + recording.getId()));
+            idComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                new ComponentBuilder("§aНажмите для просмотра записи #" + recording.getId()).create()));
+            
+            // Остальная информация о записи
+            TextComponent infoComponent = new TextComponent(String.format(
+                " §7| §f%s §7| %s §7| Кадров: §e%d §7| §f%ds",
                 recording.getPlayerName(),
                 dateFormat.format(date),
                 recording.getFrameCount(),
                 recording.getDurationSeconds()
             ));
+            
+            // Отправляем компоненты
+            idComponent.addExtra(infoComponent);
+            player.spigot().sendMessage(idComponent);
+            
+            // Причина на отдельной строке
             player.sendMessage("  §7Причина: §e" + recording.getReason());
         }
         
         player.sendMessage("§6════════════════════════════════════════");
-        player.sendMessage("§7Используйте §f/axai view <id> §7для просмотра");
+        
+        // Создаем навигационную панель
+        sendNavigationBar(player, page, totalPages);
+        
+        // Подсказка
+        player.sendMessage("§7Используйте §f/axai view <id> §7или кликните на ID");
+    }
+    
+    private void sendNavigationBar(Player player, int currentPage, int totalPages) {
+        TextComponent navigation = new TextComponent("");
+        
+        // Кнопка "Предыдущая страница"
+        if (currentPage > 1) {
+            TextComponent prevButton = new TextComponent("§a◀ Предыдущая ");
+            prevButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axai list " + (currentPage - 1)));
+            prevButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                new ComponentBuilder("§aПерейти на страницу " + (currentPage - 1)).create()));
+            navigation.addExtra(prevButton);
+        } else {
+            navigation.addExtra("§8◀ Предыдущая ");
+        }
+        
+        // Информация о текущей странице
+        navigation.addExtra(String.format("§7[§f%d§7/§f%d§7]", currentPage, totalPages));
+        
+        // Кнопка "Следующая страница"
+        if (currentPage < totalPages) {
+            TextComponent nextButton = new TextComponent(" §aСледующая ▶");
+            nextButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axai list " + (currentPage + 1)));
+            nextButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                new ComponentBuilder("§aПерейти на страницу " + (currentPage + 1)).create()));
+            navigation.addExtra(nextButton);
+        } else {
+            navigation.addExtra(" §8Следующая ▶");
+        }
+        
+        player.spigot().sendMessage(navigation);
+        
+        // Добавляем быстрый переход к страницам
+        if (totalPages > 5) {
+            TextComponent quickNav = new TextComponent("§7Быстрый переход: ");
+            
+            // Первая страница
+            if (currentPage != 1) {
+                TextComponent firstPage = new TextComponent("§e[1] ");
+                firstPage.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axai list 1"));
+                firstPage.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                    new ComponentBuilder("§aПерейти к первой странице").create()));
+                quickNav.addExtra(firstPage);
+            }
+            
+            // Показываем несколько страниц вокруг текущей
+            int start = Math.max(2, currentPage - 2);
+            int end = Math.min(totalPages - 1, currentPage + 2);
+            
+            for (int i = start; i <= end; i++) {
+                if (i == currentPage) {
+                    quickNav.addExtra("§f[" + i + "] ");
+                } else {
+                    TextComponent pageLink = new TextComponent("§e[" + i + "] ");
+                    pageLink.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axai list " + i));
+                    pageLink.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        new ComponentBuilder("§aПерейти на страницу " + i).create()));
+                    quickNav.addExtra(pageLink);
+                }
+            }
+            
+            // Последняя страница
+            if (currentPage != totalPages) {
+                TextComponent lastPage = new TextComponent("§e[" + totalPages + "]");
+                lastPage.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axai list " + totalPages));
+                lastPage.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                    new ComponentBuilder("§aПерейти к последней странице").create()));
+                quickNav.addExtra(lastPage);
+            }
+            
+            player.spigot().sendMessage(quickNav);
+        }
     }
     
     private void handleView(Player player, String idStr) {
@@ -208,7 +329,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
     
     private void sendHelp(Player player) {
         player.sendMessage("§6═══════════ §eAntiXrayAI §6═══════════");
-        player.sendMessage("§f/axai list §7- список всех записей");
+        player.sendMessage("§f/axai list [страница] §7- список всех записей");
         player.sendMessage("§f/axai view <id> §7- просмотреть запись");
         player.sendMessage("§f/axai delete <id> §7- удалить запись");
         player.sendMessage("§f/axai stop §7- остановить просмотр");
@@ -230,13 +351,25 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
                     .collect(Collectors.toList());
         }
         
-        if (args.length == 2 && (args[0].equalsIgnoreCase("view") || 
-                                  args[0].equalsIgnoreCase("delete"))) {
-            // Предлагаем ID записей
-            return recordingManager.getCompletedRecordings().stream()
-                    .map(r -> String.valueOf(r.getId()))
-                    .filter(s -> s.startsWith(args[1]))
-                    .collect(Collectors.toList());
+        if (args.length == 2) {
+            if (args[0].equalsIgnoreCase("list")) {
+                // Предлагаем номера страниц
+                List<PlayerRecording> recordings = recordingManager.getCompletedRecordings();
+                int totalPages = (int) Math.ceil((double) recordings.size() / RECORDINGS_PER_PAGE);
+                List<String> pages = new ArrayList<>();
+                for (int i = 1; i <= totalPages; i++) {
+                    pages.add(String.valueOf(i));
+                }
+                return pages.stream()
+                        .filter(s -> s.startsWith(args[1]))
+                        .collect(Collectors.toList());
+            } else if (args[0].equalsIgnoreCase("view") || args[0].equalsIgnoreCase("delete")) {
+                // Предлагаем ID записей
+                return recordingManager.getCompletedRecordings().stream()
+                        .map(r -> String.valueOf(r.getId()))
+                        .filter(s -> s.startsWith(args[1]))
+                        .collect(Collectors.toList());
+            }
         }
         
         return Collections.emptyList();
