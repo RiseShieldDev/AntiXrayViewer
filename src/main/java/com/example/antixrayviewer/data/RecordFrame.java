@@ -1,4 +1,4 @@
-package com.example.antixrayai.data;
+package com.example.antixrayviewer.data;
 
 import java.util.ArrayList;
 import java.util.List;

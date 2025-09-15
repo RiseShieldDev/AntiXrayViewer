@@ -1,7 +1,7 @@
-package com.example.antixrayai.listeners;
+package com.example.antixrayviewer.listeners;
 
-import com.example.antixrayai.AntiXrayAI;
-import com.example.antixrayai.managers.RecordingManager;
+import com.example.antixrayviewer.AntiXrayViewer;
+import com.example.antixrayviewer.managers.RecordingManager;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -16,7 +16,7 @@ import java.util.UUID;
 
 public class OreBreakListener implements Listener {
     
-    private final AntiXrayAI plugin;
+    private final AntiXrayViewer plugin;
     private final RecordingManager recordingManager;
     private final Map<UUID, OreBreakData> playerOreBreaks = new HashMap<>();
     
@@ -25,7 +25,7 @@ public class OreBreakListener implements Listener {
     private final int netheriteThreshold;
     private final long resetTime;
     
-    public OreBreakListener(AntiXrayAI plugin, RecordingManager recordingManager) {
+    public OreBreakListener(AntiXrayViewer plugin, RecordingManager recordingManager) {
         this.plugin = plugin;
         this.recordingManager = recordingManager;
         
@@ -98,13 +98,13 @@ public class OreBreakListener implements Listener {
     
     private void notifyAdmins(Player suspect, String reason) {
         String message = String.format(
-            "§c[AntiXrayAI] §e⚠ Подозрение: §f%s §7- %s §a(запись начата)",
+            "§c[AntiXrayViewer] §e⚠ Подозрение: §f%s §7- %s §a(запись начата)",
             suspect.getName(), reason
         );
         
         // Отправляем сообщение всем онлайн администраторам
         plugin.getServer().getOnlinePlayers().stream()
-            .filter(p -> p.hasPermission("antixrayai.admin"))
+            .filter(p -> p.hasPermission("antixrayviewer.admin"))
             .forEach(admin -> admin.sendMessage(message));
         
         // Также логируем в консоль

@@ -1,36 +1,36 @@
-name: AntiXrayAI
+name: AntiXrayViewer
 version: '${version}'
-main: com.example.antixrayai.AntiXrayAI
+main: com.example.antixrayviewer.AntiXrayViewer
 api-version: '1.21'
 authors: [NikitaRTN]
-description: AntiXray AI plugin for Paper 1.21.4
-website: https://github.com/NikitaRTN/AntiXrayAI
+description: AntiXray Viewer plugin for Paper 1.21.4
+website: https://github.com/RiseShieldDev/AntiXrayViewer
 
 commands:
-  antixrayai:
-    description: Main command for AntiXrayAI plugin
+  antixrayviewer:
+    description: Main command for AntiXrayViewer plugin
     usage: /<command> [help]
-    aliases: [axai, antixray]
-    permission: antixrayai.use
+    aliases: [axv, antixray]
+    permission: antixrayviewer.use
     permission-message: You don't have permission to use this command!
 
 permissions:
-  antixrayai.*:
-    description: Gives access to all AntiXrayAI commands
+  antixrayviewer.*:
+    description: Gives access to all AntiXrayViewer commands
     default: op
     children:
-      antixrayai.use: true
-      antixrayai.admin: true
-      antixrayai.reload: true
+      antixrayviewer.use: true
+      antixrayviewer.admin: true
+      antixrayviewer.reload: true
   
-  antixrayai.use:
-    description: Allows using basic AntiXrayAI commands
+  antixrayviewer.use:
+    description: Allows using basic AntiXrayViewer commands
     default: true
   
-  antixrayai.admin:
-    description: Allows using admin AntiXrayAI commands
+  antixrayviewer.admin:
+    description: Allows using admin AntiXrayViewer commands
     default: op
   
-  antixrayai.reload:
+  antixrayviewer.reload:
     description: Allows reloading the plugin configuration
     default: op

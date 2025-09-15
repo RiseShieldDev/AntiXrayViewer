@@ -1,14 +1,14 @@
-package com.example.antixrayai;
+package com.example.antixrayviewer;
 
-import com.example.antixrayai.commands.AntiXrayCommand;
-import com.example.antixrayai.listeners.OreBreakListener;
-import com.example.antixrayai.managers.RecordingManager;
+import com.example.antixrayviewer.commands.AntiXrayCommand;
+import com.example.antixrayviewer.listeners.OreBreakListener;
+import com.example.antixrayviewer.managers.RecordingManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
 
-public class AntiXrayAI extends JavaPlugin {
+public class AntiXrayViewer extends JavaPlugin {
     
     private RecordingManager recordingManager;
     private AntiXrayCommand commandHandler;
@@ -30,18 +30,18 @@ public class AntiXrayAI extends JavaPlugin {
         
         // Регистрируем команды
         commandHandler = new AntiXrayCommand(this, recordingManager);
-        getCommand("antixrayai").setExecutor(commandHandler);
-        getCommand("antixrayai").setTabCompleter(commandHandler);
+        getCommand("antixrayviewer").setExecutor(commandHandler);
+        getCommand("antixrayviewer").setTabCompleter(commandHandler);
         
         // Сообщение при включении плагина
         getLogger().info("╔════════════════════════════════════╗");
-        getLogger().info("║     AntiXrayAI v" + getDescription().getVersion() + " enabled!     ║");
+        getLogger().info("║   AntiXrayViewer v" + getDescription().getVersion() + " enabled!   ║");
         getLogger().info("║     Anti X-Ray system activated!   ║");
         getLogger().info("╚════════════════════════════════════╝");
         
         // Отправка сообщения в консоль сервера
         Bukkit.getConsoleSender().sendMessage(
-            ChatColor.GREEN + "[AntiXrayAI] " + 
+            ChatColor.GREEN + "[AntiXrayViewer] " + 
             ChatColor.YELLOW + "Система защиты от X-Ray активирована!"
         );
         
@@ -67,13 +67,13 @@ public class AntiXrayAI extends JavaPlugin {
         
         // Сообщение при выключении плагина
         getLogger().info("╔════════════════════════════════════╗");
-        getLogger().info("║     AntiXrayAI v" + getDescription().getVersion() + " disabled!    ║");
+        getLogger().info("║  AntiXrayViewer v" + getDescription().getVersion() + " disabled!   ║");
         getLogger().info("║      All recordings saved!         ║");
         getLogger().info("╚════════════════════════════════════╝");
         
         // Отправка сообщения в консоль сервера
         Bukkit.getConsoleSender().sendMessage(
-            ChatColor.RED + "[AntiXrayAI] " + 
+            ChatColor.RED + "[AntiXrayViewer] " + 
             ChatColor.YELLOW + "Плагин отключен. Все записи сохранены."
         );
     }
@@ -94,9 +94,9 @@ public class AntiXrayAI extends JavaPlugin {
         config.addDefault("notifications.admin-alerts", true);
         config.addDefault("notifications.console-logging", true);
         
-        config.addDefault("messages.detection", "§c[AntiXrayAI] §e⚠ Подозрение: §f{player} §7- {reason}");
-        config.addDefault("messages.recording-started", "§a[AntiXrayAI] §7Начата запись игрока §f{player}");
-        config.addDefault("messages.recording-completed", "§a[AntiXrayAI] §7Запись завершена. ID: §b#{id}");
+        config.addDefault("messages.detection", "§c[AntiXrayViewer] §e⚠ Подозрение: §f{player} §7- {reason}");
+        config.addDefault("messages.recording-started", "§a[AntiXrayViewer] §7Начата запись игрока §f{player}");
+        config.addDefault("messages.recording-completed", "§a[AntiXrayViewer] §7Запись завершена. ID: §b#{id}");
         
         config.options().copyDefaults(true);
         saveConfig();

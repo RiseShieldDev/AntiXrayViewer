@@ -1,9 +1,9 @@
-package com.example.antixrayai.commands;
+package com.example.antixrayviewer.commands;
 
-import com.example.antixrayai.AntiXrayAI;
-import com.example.antixrayai.data.PlayerRecording;
-import com.example.antixrayai.managers.RecordingManager;
-import com.example.antixrayai.replay.ReplaySession;
+import com.example.antixrayviewer.AntiXrayViewer;
+import com.example.antixrayviewer.data.PlayerRecording;
+import com.example.antixrayviewer.managers.RecordingManager;
+import com.example.antixrayviewer.replay.ReplaySession;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.ComponentBuilder;
 import net.md_5.bungee.api.chat.HoverEvent;
@@ -20,13 +20,13 @@ import java.util.stream.Collectors;
 
 public class AntiXrayCommand implements CommandExecutor, TabCompleter {
     
-    private final AntiXrayAI plugin;
+    private final AntiXrayViewer plugin;
     private final RecordingManager recordingManager;
     private final Map<UUID, ReplaySession> replaySessions = new HashMap<>();
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM HH:mm:ss");
     private static final int RECORDINGS_PER_PAGE = 8; // Количество записей на странице
     
-    public AntiXrayCommand(AntiXrayAI plugin, RecordingManager recordingManager) {
+    public AntiXrayCommand(AntiXrayViewer plugin, RecordingManager recordingManager) {
         this.plugin = plugin;
         this.recordingManager = recordingManager;
     }
@@ -40,7 +40,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         
         Player player = (Player) sender;
         
-        if (!player.hasPermission("antixrayai.admin")) {
+        if (!player.hasPermission("antixrayviewer.admin")) {
             player.sendMessage("§cУ вас нет прав для использования этой команды!");
             return true;
         }
@@ -129,7 +129,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         int endIndex = Math.min(startIndex + RECORDINGS_PER_PAGE, totalRecordings);
         
         // Заголовок с номером страницы
-        player.sendMessage(String.format("§6═══════ §eЗаписи AntiXrayAI §7[§f%d§7/§f%d§7] §6═══════", page, totalPages));
+        player.sendMessage(String.format("§6═══════ §eЗаписи AntiXrayViewer §7[§f%d§7/§f%d§7] §6═══════", page, totalPages));
         
         // Отображаем записи текущей страницы
         for (int i = startIndex; i < endIndex; i++) {
@@ -139,7 +139,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
             
             // Создаем кликабельный ID для быстрого просмотра
             TextComponent idComponent = new TextComponent(String.format("%s §7#§b%d", status, recording.getId()));
-            idComponent.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axai view " + recording.getId()));
+            idComponent.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axv view " + recording.getId()));
             idComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                 new ComponentBuilder("§aНажмите для просмотра записи #" + recording.getId()).create()));
             
@@ -166,7 +166,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         sendNavigationBar(player, page, totalPages);
         
         // Подсказка
-        player.sendMessage("§7Используйте §f/axai view <id> §7или кликните на ID");
+        player.sendMessage("§7Используйте §f/axv view <id> §7или кликните на ID");
     }
     
     private void sendNavigationBar(Player player, int currentPage, int totalPages) {
@@ -175,7 +175,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         // Кнопка "Предыдущая страница"
         if (currentPage > 1) {
             TextComponent prevButton = new TextComponent("§a◀ Предыдущая ");
-            prevButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axai list " + (currentPage - 1)));
+            prevButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axv list " + (currentPage - 1)));
             prevButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                 new ComponentBuilder("§aПерейти на страницу " + (currentPage - 1)).create()));
             navigation.addExtra(prevButton);
@@ -189,7 +189,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         // Кнопка "Следующая страница"
         if (currentPage < totalPages) {
             TextComponent nextButton = new TextComponent(" §aСледующая ▶");
-            nextButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axai list " + (currentPage + 1)));
+            nextButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axv list " + (currentPage + 1)));
             nextButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                 new ComponentBuilder("§aПерейти на страницу " + (currentPage + 1)).create()));
             navigation.addExtra(nextButton);
@@ -206,7 +206,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
             // Первая страница
             if (currentPage != 1) {
                 TextComponent firstPage = new TextComponent("§e[1] ");
-                firstPage.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axai list 1"));
+                firstPage.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axv list 1"));
                 firstPage.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                     new ComponentBuilder("§aПерейти к первой странице").create()));
                 quickNav.addExtra(firstPage);
@@ -221,7 +221,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
                     quickNav.addExtra("§f[" + i + "] ");
                 } else {
                     TextComponent pageLink = new TextComponent("§e[" + i + "] ");
-                    pageLink.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axai list " + i));
+                    pageLink.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axv list " + i));
                     pageLink.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                         new ComponentBuilder("§aПерейти на страницу " + i).create()));
                     quickNav.addExtra(pageLink);
@@ -231,7 +231,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
             // Последняя страница
             if (currentPage != totalPages) {
                 TextComponent lastPage = new TextComponent("§e[" + totalPages + "]");
-                lastPage.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axai list " + totalPages));
+                lastPage.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axv list " + totalPages));
                 lastPage.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                     new ComponentBuilder("§aПерейти к последней странице").create()));
                 quickNav.addExtra(lastPage);
@@ -267,7 +267,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
             player.sendMessage("§7Игрок: §f" + recording.getPlayerName());
             player.sendMessage("§7Причина: §e" + recording.getReason());
             player.sendMessage("§7Длительность: §f" + recording.getDurationSeconds() + " секунд");
-            player.sendMessage("§7Используйте §f/axai stop §7для остановки");
+            player.sendMessage("§7Используйте §f/axv stop §7для остановки");
             
             session.start();
             
@@ -346,20 +346,20 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
     }
     
     private void sendHelp(Player player) {
-        player.sendMessage("§6═══════════ §eAntiXrayAI §6═══════════");
-        player.sendMessage("§f/axai list [страница] §7- список всех записей");
-        player.sendMessage("§f/axai view <id> §7- просмотреть запись");
-        player.sendMessage("§f/axai delete <id> §7- удалить запись");
-        player.sendMessage("§f/axai stop §7- остановить просмотр");
-        player.sendMessage("§f/axai active §7- активные записи");
-        player.sendMessage("§f/axai reload §7- синхронизировать записи");
-        player.sendMessage("§f/axai help §7- показать эту справку");
-        player.sendMessage("§6═════════════════════════════════════");
+        player.sendMessage("§6═══════════ §eAntiXrayViewer §6═══════════");
+        player.sendMessage("§f/axv list [страница] §7- список всех записей");
+        player.sendMessage("§f/axv view <id> §7- просмотреть запись");
+        player.sendMessage("§f/axv delete <id> §7- удалить запись");
+        player.sendMessage("§f/axv stop §7- остановить просмотр");
+        player.sendMessage("§f/axv active §7- активные записи");
+        player.sendMessage("§f/axv reload §7- синхронизировать записи");
+        player.sendMessage("§f/axv help §7- показать эту справку");
+        player.sendMessage("§6══════════════════════════════════════");
     }
     
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (!sender.hasPermission("antixrayai.admin")) {
+        if (!sender.hasPermission("antixrayviewer.admin")) {
             return Collections.emptyList();
         }
         

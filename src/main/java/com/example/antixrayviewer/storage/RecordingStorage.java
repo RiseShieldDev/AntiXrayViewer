@@ -1,9 +1,9 @@
-package com.example.antixrayai.storage;
+package com.example.antixrayviewer.storage;
 
-import com.example.antixrayai.AntiXrayAI;
-import com.example.antixrayai.data.PlayerRecording;
-import com.example.antixrayai.data.RecordFrame;
-import com.example.antixrayai.data.BlockEvent;
+import com.example.antixrayviewer.AntiXrayViewer;
+import com.example.antixrayviewer.data.PlayerRecording;
+import com.example.antixrayviewer.data.RecordFrame;
+import com.example.antixrayviewer.data.BlockEvent;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
@@ -20,11 +20,11 @@ import java.util.logging.Level;
  */
 public class RecordingStorage {
     
-    private final AntiXrayAI plugin;
+    private final AntiXrayViewer plugin;
     private final File recordingsFolder;
     private final Gson gson;
     
-    public RecordingStorage(AntiXrayAI plugin) {
+    public RecordingStorage(AntiXrayViewer plugin) {
         this.plugin = plugin;
         this.recordingsFolder = new File(plugin.getDataFolder(), "recordings");
         

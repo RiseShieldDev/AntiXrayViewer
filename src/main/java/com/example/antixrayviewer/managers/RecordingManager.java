@@ -1,10 +1,10 @@
-package com.example.antixrayai.managers;
+package com.example.antixrayviewer.managers;
 
-import com.example.antixrayai.AntiXrayAI;
-import com.example.antixrayai.data.PlayerRecording;
-import com.example.antixrayai.data.RecordFrame;
-import com.example.antixrayai.data.BlockEvent;
-import com.example.antixrayai.storage.RecordingStorage;
+import com.example.antixrayviewer.AntiXrayViewer;
+import com.example.antixrayviewer.data.PlayerRecording;
+import com.example.antixrayviewer.data.RecordFrame;
+import com.example.antixrayviewer.data.BlockEvent;
+import com.example.antixrayviewer.storage.RecordingStorage;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class RecordingManager implements Listener {
     
-    private final AntiXrayAI plugin;
+    private final AntiXrayViewer plugin;
     private final Map<UUID, PlayerRecording> recordings = new ConcurrentHashMap<>();
     private final Map<UUID, BukkitTask> recordingTasks = new HashMap<>();
     private final List<PlayerRecording> completedRecordings = new ArrayList<>();
@@ -36,7 +36,7 @@ public class RecordingManager implements Listener {
     private final int recordIntervalTicks;
     private final int maxSavedRecordings;
     
-    public RecordingManager(AntiXrayAI plugin) {
+    public RecordingManager(AntiXrayViewer plugin) {
         this.plugin = plugin;
         
         this.recordingDuration = plugin.getConfig().getInt("recording.duration", 180) * 1000L;
@@ -218,8 +218,8 @@ public class RecordingManager implements Listener {
      */
     private void notifyAdminsRecordingComplete(PlayerRecording recording) {
         String message = String.format(
-            "§a[AntiXrayAI] §7Запись игрока §f%s §7завершена. " +
-            "§7Кадров: §e%d §7| ID: §b#%d §7| §f/axai view %d",
+            "§a[AntiXrayViewer] §7Запись игрока §f%s §7завершена. " +
+            "§7Кадров: §e%d §7| ID: §b#%d §7| §f/axv view %d",
             recording.getPlayerName(),
             recording.getFrames().size(),
             recording.getId(),
@@ -227,7 +227,7 @@ public class RecordingManager implements Listener {
         );
         
         plugin.getServer().getOnlinePlayers().stream()
-            .filter(p -> p.hasPermission("antixrayai.admin"))
+            .filter(p -> p.hasPermission("antixrayviewer.admin"))
             .forEach(admin -> admin.sendMessage(message));
     }
     
