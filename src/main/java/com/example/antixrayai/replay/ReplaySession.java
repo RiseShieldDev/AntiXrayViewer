@@ -104,9 +104,27 @@ public class ReplaySession {
      */
     private void prescanBlockEvents() {
         Set<String> processedBlocks = new HashSet<>();
+        Set<String> placedBlocks = new HashSet<>(); // Для отслеживания установленных блоков
         int restoredCount = 0;
         int skippedCount = 0;
         
+        // Первый проход - собираем информацию о всех установленных блоках
+        for (RecordFrame frame : recording.getFrames()) {
+            if (frame.hasBlockEvents()) {
+                for (BlockEvent event : frame.getBlockEvents()) {
+                    if (event.getType() == BlockEvent.EventType.PLACE) {
+                        World world = plugin.getServer().getWorld(event.getWorld());
+                        if (world != null) {
+                            Location loc = new Location(world, event.getX(), event.getY(), event.getZ());
+                            String blockKey = getLocationKey(loc);
+                            placedBlocks.add(blockKey);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Второй проход - восстанавливаем сломанные блоки (но не те, которые были потом установлены)
         for (RecordFrame frame : recording.getFrames()) {
             if (frame.hasBlockEvents()) {
                 for (BlockEvent event : frame.getBlockEvents()) {
@@ -115,6 +133,11 @@ public class ReplaySession {
                         if (world != null) {
                             Location loc = new Location(world, event.getX(), event.getY(), event.getZ());
                             String blockKey = getLocationKey(loc);
+                            
+                            // Проверяем, не был ли этот блок потом установлен заново
+                            if (placedBlocks.contains(blockKey)) {
+                                continue; // Пропускаем блоки, которые будут установлены позже
+                            }
                             
                             // Проверяем, не обработали ли мы уже этот блок
                             if (!processedBlocks.contains(blockKey)) {
@@ -159,8 +182,8 @@ public class ReplaySession {
             }
         }
         
-        viewer.sendMessage(String.format("§7Восстановлено блоков: §e%d§7, пропущено: §8%d",
-                                        restoredCount, skippedCount));
+        viewer.sendMessage(String.format("§7Восстановлено блоков: §e%d§7, пропущено: §8%d§7, будет установлено: §a%d",
+                                        restoredCount, skippedCount, placedBlocks.size()));
         
         // Повторная отправка всех блоков через секунду для надежности
         if (!fakeBlocks.isEmpty()) {
@@ -368,6 +391,33 @@ public class ReplaySession {
                 sendBlockBreakAnimation(blockLoc, -1);
                 activeBlockBreaking.remove(blockKey);
                 break;
+                
+            case PLACE:
+                // Показываем установку блока
+                if (!fakeBlocks.containsKey(blockLoc)) {
+                    // Сохраняем текущее состояние (обычно воздух после ломания)
+                    Block currentBlock = blockLoc.getBlock();
+                    fakeBlocks.put(blockLoc, currentBlock.getBlockData());
+                }
+                
+                // Показываем новый блок для зрителя
+                BlockData newBlockData = event.getBlockType().createBlockData();
+                viewer.sendBlockChange(blockLoc, newBlockData);
+                
+                // Воспроизводим звук установки блока
+                world.playSound(blockLoc, event.getBlockType().createBlockData().getSoundGroup().getPlaceSound(), 1.0f, 1.0f);
+                
+                // Показываем частицы
+                world.playEffect(blockLoc, org.bukkit.Effect.STEP_SOUND, event.getBlockType());
+                
+                // Повторная отправка для надежности
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        viewer.sendBlockChange(blockLoc, newBlockData);
+                    }
+                }.runTaskLater(plugin, 1);
+                break;
         }
     }
     
@@ -491,16 +541,22 @@ public class ReplaySession {
         // Проверяем, есть ли события блоков
         if (frame.hasBlockEvents()) {
             boolean hasBreaking = false;
+            boolean hasPlacing = false;
             for (BlockEvent event : frame.getBlockEvents()) {
                 if (event.getType() == BlockEvent.EventType.BREAK_START ||
                     event.getType() == BlockEvent.EventType.BREAK_PROGRESS ||
                     event.getType() == BlockEvent.EventType.BREAK_COMPLETE) {
                     hasBreaking = true;
-                    break;
+                }
+                if (event.getType() == BlockEvent.EventType.PLACE) {
+                    hasPlacing = true;
                 }
             }
             if (hasBreaking) {
                 sb.append("§c⛏ ");
+            }
+            if (hasPlacing) {
+                sb.append("§a⬜ ");
             }
         }
         

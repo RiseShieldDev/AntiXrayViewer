@@ -13,6 +13,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.block.BlockDamageAbortEvent;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -383,6 +384,41 @@ public class RecordingManager implements Listener {
         );
         
         pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
+    }
+    
+    /**
+     * Обработка установки блока
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockPlace(BlockPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (!isRecording(player)) {
+            return;
+        }
+        
+        Block block = event.getBlockPlaced();
+        UUID playerId = player.getUniqueId();
+        
+        // Добавляем событие установки блока в буфер
+        BlockEvent blockEvent = new BlockEvent(
+            System.currentTimeMillis(),
+            BlockEvent.EventType.PLACE,
+            block.getX(),
+            block.getY(),
+            block.getZ(),
+            block.getWorld().getName(),
+            block.getType(),
+            1.0f,
+            player.getEntityId()
+        );
+        
+        pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
+        
+        plugin.getLogger().fine(String.format(
+            "Записана установка блока: %s в %d,%d,%d мире %s игроком %s",
+            block.getType(), block.getX(), block.getY(), block.getZ(),
+            block.getWorld().getName(), player.getName()
+        ));
     }
     
     /**
