@@ -123,6 +123,14 @@ public class RecordingStorage {
     }
     
     /**
+     * Проверить, существует ли файл записи
+     */
+    public boolean recordingFileExists(int recordingId) {
+        File file = new File(recordingsFolder, "recording-" + recordingId + ".json");
+        return file.exists();
+    }
+    
+    /**
      * Получить размер всех файлов записей в МБ
      */
     public double getTotalSizeMB() {

@@ -242,7 +242,40 @@ public class RecordingManager implements Listener {
      * Получить все завершенные записи
      */
     public List<PlayerRecording> getCompletedRecordings() {
+        // Синхронизируем с файловой системой
+        syncRecordingsWithFileSystem();
         return new ArrayList<>(completedRecordings);
+    }
+    
+    /**
+     * Синхронизировать записи в памяти с файловой системой
+     * Удаляет из памяти записи, файлы которых не существуют
+     */
+    public void syncRecordingsWithFileSystem() {
+        List<PlayerRecording> toRemove = new ArrayList<>();
+        
+        for (PlayerRecording recording : completedRecordings) {
+            if (!storage.recordingFileExists(recording.getId())) {
+                toRemove.add(recording);
+                plugin.getLogger().info("Запись #" + recording.getId() + " удалена из памяти (файл не найден)");
+            }
+        }
+        
+        // Удаляем записи без файлов из памяти
+        completedRecordings.removeAll(toRemove);
+        
+        if (!toRemove.isEmpty()) {
+            plugin.getLogger().info("Синхронизация: удалено " + toRemove.size() + " записей без файлов");
+        }
+    }
+    
+    /**
+     * Перезагрузить все записи из файлов
+     * Полностью обновляет список записей из файловой системы
+     */
+    public void reloadRecordings() {
+        completedRecordings.clear();
+        loadSavedRecordings();
     }
     
     /**

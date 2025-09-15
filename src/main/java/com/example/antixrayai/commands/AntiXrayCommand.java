@@ -90,6 +90,11 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
                 handleActive(player);
                 break;
                 
+            case "reload":
+            case "refresh":
+                handleReload(player);
+                break;
+                
             case "help":
             default:
                 sendHelp(player);
@@ -318,6 +323,19 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("§6═════════════════════════════════");
     }
     
+    private void handleReload(Player player) {
+        player.sendMessage("§eПерезагружаю записи из файлов...");
+        
+        // Синхронизируем с файловой системой
+        recordingManager.syncRecordingsWithFileSystem();
+        
+        // Или полностью перезагружаем из файлов
+        // recordingManager.reloadRecordings();
+        
+        List<PlayerRecording> recordings = recordingManager.getCompletedRecordings();
+        player.sendMessage("§aЗаписи синхронизированы! Загружено: §f" + recordings.size() + " §aзаписей.");
+    }
+    
     private boolean stopReplay(Player player) {
         ReplaySession session = replaySessions.remove(player.getUniqueId());
         if (session != null) {
@@ -334,6 +352,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("§f/axai delete <id> §7- удалить запись");
         player.sendMessage("§f/axai stop §7- остановить просмотр");
         player.sendMessage("§f/axai active §7- активные записи");
+        player.sendMessage("§f/axai reload §7- синхронизировать записи");
         player.sendMessage("§f/axai help §7- показать эту справку");
         player.sendMessage("§6═════════════════════════════════════");
     }
@@ -345,7 +364,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         }
         
         if (args.length == 1) {
-            return Arrays.asList("list", "view", "delete", "stop", "active", "help")
+            return Arrays.asList("list", "view", "delete", "stop", "active", "reload", "help")
                     .stream()
                     .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
                     .collect(Collectors.toList());
