@@ -63,10 +63,12 @@ public class RecordingManager implements Listener {
         // Сортируем по ID в обратном порядке (новые первые)
         completedRecordings.sort((r1, r2) -> Integer.compare(r2.getId(), r1.getId()));
         
-        // Ограничиваем количество записей
-        while (completedRecordings.size() > maxSavedRecordings) {
-            PlayerRecording removed = completedRecordings.remove(completedRecordings.size() - 1);
-            storage.deleteRecording(removed.getId());
+        // Ограничиваем количество записей (если maxSavedRecordings > 0)
+        if (maxSavedRecordings > 0) {
+            while (completedRecordings.size() > maxSavedRecordings) {
+                PlayerRecording removed = completedRecordings.remove(completedRecordings.size() - 1);
+                storage.deleteRecording(removed.getId());
+            }
         }
         
         plugin.getLogger().info("Загружено " + loaded.size() + " записей из хранилища");
@@ -83,12 +85,19 @@ public class RecordingManager implements Listener {
             return;
         }
         
+        String currentPlayerName = player.getName();
         PlayerRecording recording = new PlayerRecording(
             playerId,
-            player.getName(),
+            currentPlayerName,
             reason,
             System.currentTimeMillis()
         );
+        
+        // Дополнительное логирование для отладки проблемы с никами
+        plugin.getLogger().info(String.format(
+            "Создана запись: UUID=%s, Name=%s, Reason=%s",
+            playerId.toString(), currentPlayerName, reason
+        ));
         
         recordings.put(playerId, recording);
         
@@ -98,6 +107,13 @@ public class RecordingManager implements Listener {
             
             @Override
             public void run() {
+                // Проверяем, все еще ли идет запись (важная проверка!)
+                if (!recordings.containsKey(playerId)) {
+                    // Запись была остановлена извне, прекращаем задачу
+                    this.cancel();
+                    return;
+                }
+                
                 // Проверяем, не вышел ли игрок
                 Player currentPlayer = plugin.getServer().getPlayer(playerId);
                 if (currentPlayer == null || !currentPlayer.isOnline()) {
@@ -131,9 +147,13 @@ public class RecordingManager implements Listener {
         PlayerRecording recording = recordings.remove(playerId);
         BukkitTask task = recordingTasks.remove(playerId);
         
+        // Сначала отменяем задачу
         if (task != null) {
             task.cancel();
         }
+        
+        // Дополнительная проверка - убеждаемся, что запись удалена из активных
+        recordings.remove(playerId);
         
         // Очищаем буферы событий
         pendingBlockEvents.remove(playerId);
@@ -206,10 +226,12 @@ public class RecordingManager implements Listener {
         // Сохраняем в файл
         storage.saveRecording(recording);
         
-        // Ограничиваем количество сохраненных записей
-        while (completedRecordings.size() > maxSavedRecordings) {
-            PlayerRecording removed = completedRecordings.remove(completedRecordings.size() - 1);
-            storage.deleteRecording(removed.getId());
+        // Ограничиваем количество сохраненных записей (если maxSavedRecordings > 0)
+        if (maxSavedRecordings > 0) {
+            while (completedRecordings.size() > maxSavedRecordings) {
+                PlayerRecording removed = completedRecordings.remove(completedRecordings.size() - 1);
+                storage.deleteRecording(removed.getId());
+            }
         }
     }
     
@@ -308,9 +330,38 @@ public class RecordingManager implements Listener {
      * Остановить все активные записи (при выключении плагина)
      */
     public void stopAllRecordings() {
-        for (UUID playerId : new HashSet<>(recordings.keySet())) {
+        // Создаем копию множества, чтобы избежать ConcurrentModificationException
+        Set<UUID> activeRecordings = new HashSet<>(recordings.keySet());
+        
+        for (UUID playerId : activeRecordings) {
             stopRecording(playerId, "Плагин выключен");
         }
+        
+        // Дополнительная очистка на случай, если что-то осталось
+        recordings.clear();
+        
+        // Отменяем все оставшиеся задачи
+        for (BukkitTask task : recordingTasks.values()) {
+            if (task != null) {
+                task.cancel();
+            }
+        }
+        recordingTasks.clear();
+    }
+    
+    /**
+     * Принудительно остановить запись игрока (для команд администратора)
+     */
+    public boolean forceStopRecording(String playerName) {
+        for (Map.Entry<UUID, PlayerRecording> entry : recordings.entrySet()) {
+            PlayerRecording recording = entry.getValue();
+            if (recording.getPlayerName().equalsIgnoreCase(playerName)) {
+                UUID playerId = entry.getKey();
+                stopRecording(playerId, "Остановлено администратором");
+                return true;
+            }
+        }
+        return false;
     }
     
     // ========== ОБРАБОТЧИКИ СОБЫТИЙ БЛОКОВ ==========
@@ -343,7 +394,7 @@ public class RecordingManager implements Listener {
             block.getWorld().getName(),
             block.getType(),
             0.1f,
-            player.getEntityId()
+            -1 // Не используем entityId, так как он может быть неуникальным
         );
         
         pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
@@ -413,7 +464,7 @@ public class RecordingManager implements Listener {
             block.getWorld().getName(),
             block.getType(),
             1.0f,
-            player.getEntityId()
+            -1 // Не используем entityId, так как он может быть неуникальным
         );
         
         pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
@@ -442,7 +493,7 @@ public class RecordingManager implements Listener {
             block.getWorld().getName(),
             block.getType(),
             1.0f,
-            player.getEntityId()
+            -1 // Не используем entityId, так как он может быть неуникальным
         );
         
         pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);

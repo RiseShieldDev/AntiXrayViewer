@@ -185,6 +185,12 @@ public class RecordingStorage {
         }
         
         PlayerRecording toRecording() {
+            // Дополнительное логирование для отладки проблемы с никами
+            System.out.println(String.format(
+                "Загрузка записи: ID=%d, UUID=%s, Name=%s, Reason=%s",
+                id, playerId, playerName, reason
+            ));
+            
             PlayerRecording recording = new PlayerRecording(
                 java.util.UUID.fromString(playerId),
                 playerName,

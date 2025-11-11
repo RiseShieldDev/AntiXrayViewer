@@ -83,7 +83,11 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
                 break;
                 
             case "stop":
-                handleStop(player);
+                if (args.length > 1) {
+                    handleForceStop(player, args[1]);
+                } else {
+                    handleStop(player);
+                }
                 break;
                 
             case "active":
@@ -295,7 +299,15 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         if (stopReplay(player)) {
             player.sendMessage("§aВоспроизведение остановлено.");
         } else {
-            player.sendMessage("§7Вы не просматриваете запись.");
+            player.sendMessage("§7Вы не просматриваете запись. Используйте §f/axv stop <игрок> §7для остановки записи.");
+        }
+    }
+    
+    private void handleForceStop(Player player, String targetPlayerName) {
+        if (recordingManager.forceStopRecording(targetPlayerName)) {
+            player.sendMessage("§aЗапись игрока §f" + targetPlayerName + " §aостановлена.");
+        } else {
+            player.sendMessage("§cЗапись игрока §f" + targetPlayerName + " §cне найдена.");
         }
     }
     
@@ -350,7 +362,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("§f/axv list [страница] §7- список всех записей");
         player.sendMessage("§f/axv view <id> §7- просмотреть запись");
         player.sendMessage("§f/axv delete <id> §7- удалить запись");
-        player.sendMessage("§f/axv stop §7- остановить просмотр");
+        player.sendMessage("§f/axv stop [игрок] §7- остановить просмотр/запись");
         player.sendMessage("§f/axv active §7- активные записи");
         player.sendMessage("§f/axv reload §7- синхронизировать записи");
         player.sendMessage("§f/axv help §7- показать эту справку");
@@ -387,6 +399,12 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
                 return recordingManager.getCompletedRecordings().stream()
                         .map(r -> String.valueOf(r.getId()))
                         .filter(s -> s.startsWith(args[1]))
+                        .collect(Collectors.toList());
+            } else if (args[0].equalsIgnoreCase("stop")) {
+                // Предлагаем имена активных записываемых игроков
+                return recordingManager.getActiveRecordings().values().stream()
+                        .map(PlayerRecording::getPlayerName)
+                        .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
                         .collect(Collectors.toList());
             }
         }

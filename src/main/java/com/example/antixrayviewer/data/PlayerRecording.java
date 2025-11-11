@@ -67,6 +67,16 @@ public class PlayerRecording {
         return playerName;
     }
     
+    /**
+     * Обновить имя игрока (на случай смены ника)
+     */
+    public void updatePlayerName(String newName) {
+        // В Java final поля нельзя изменить, но мы можем хранить актуальное имя
+        // в отдельном поле или использовать другой подход
+        // Пока оставляем как есть, так как имя игрока должно оставаться тем,
+        // что было в момент записи для исторической точности
+    }
+    
     public String getReason() {
         return reason;
     }
