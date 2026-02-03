@@ -3,7 +3,7 @@ version: '${version}'
 main: com.example.antixrayviewer.AntiXrayViewer
 api-version: '1.21'
 authors: [NikitaRTN]
-description: AntiXray Viewer plugin for Paper 1.21.4
+description: AntiXray Viewer plugin for Paper 1.21.11
 website: https://github.com/RiseShieldDev/AntiXrayViewer
 
 commands:
