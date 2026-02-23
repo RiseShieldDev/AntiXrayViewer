@@ -19,109 +19,115 @@ import java.util.logging.Level;
  * Класс для сохранения и загрузки записей в файлы
  */
 public class RecordingStorage {
-    
+
     private final AntiXrayViewer plugin;
     private final File recordingsFolder;
     private final Gson gson;
-    
+
     public RecordingStorage(AntiXrayViewer plugin) {
         this.plugin = plugin;
         this.recordingsFolder = new File(plugin.getDataFolder(), "recordings");
-        
+
         // Создаем папку для записей, если её нет
         if (!recordingsFolder.exists()) {
             recordingsFolder.mkdirs();
         }
-        
+
         // Настраиваем Gson с красивым форматированием
         this.gson = new GsonBuilder()
-            .setPrettyPrinting()
-            .registerTypeAdapter(Material.class, new MaterialAdapter())
-            .create();
+                .setPrettyPrinting()
+                .registerTypeAdapter(Material.class, new MaterialAdapter())
+                .create();
     }
-    
+
     /**
      * Сохранить запись в файл
      */
     public boolean saveRecording(PlayerRecording recording) {
         File file = new File(recordingsFolder, "recording-" + recording.getId() + ".json");
-        
+
         try (Writer writer = new OutputStreamWriter(
                 new FileOutputStream(file), StandardCharsets.UTF_8)) {
-            
+
             // Конвертируем запись в JSON
             RecordingData data = RecordingData.fromRecording(recording);
             gson.toJson(data, writer);
             return true;
-            
+
         } catch (IOException e) {
-            plugin.getLogger().log(Level.SEVERE, 
-                "Ошибка при сохранении записи #" + recording.getId(), e);
+            plugin.getLogger().log(Level.SEVERE,
+                    "Ошибка при сохранении записи #" + recording.getId(), e);
             return false;
         }
     }
-    
+
     /**
      * Загрузить все записи из файлов
      */
     public List<PlayerRecording> loadAllRecordings() {
         List<PlayerRecording> recordings = new ArrayList<>();
-        
+
         if (!recordingsFolder.exists()) {
             return recordings;
         }
-        
-        File[] files = recordingsFolder.listFiles((dir, name) -> 
-            name.startsWith("recording-") && name.endsWith(".json"));
-        
+
+        File[] files = recordingsFolder
+                .listFiles((dir, name) -> name.startsWith("recording-") && name.endsWith(".json"));
+
         if (files == null) {
             return recordings;
         }
-        
+
+        int maxId = 0;
         for (File file : files) {
             PlayerRecording recording = loadRecording(file);
             if (recording != null) {
                 recordings.add(recording);
+                if (recording.getId() > maxId) {
+                    maxId = recording.getId();
+                }
             }
         }
-        
+
+        PlayerRecording.updateIdCounter(maxId);
+
         plugin.getLogger().info("Загружено записей из файлов: " + recordings.size());
         return recordings;
     }
-    
+
     /**
      * Загрузить одну запись из файла
      */
     private PlayerRecording loadRecording(File file) {
         try (Reader reader = new InputStreamReader(
                 new FileInputStream(file), StandardCharsets.UTF_8)) {
-            
+
             RecordingData data = gson.fromJson(reader, RecordingData.class);
             if (data != null) {
                 return data.toRecording();
             }
-            
+
         } catch (IOException | JsonSyntaxException e) {
-            plugin.getLogger().log(Level.WARNING, 
-                "Ошибка при загрузке записи из файла: " + file.getName(), e);
+            plugin.getLogger().log(Level.WARNING,
+                    "Ошибка при загрузке записи из файла: " + file.getName(), e);
         }
-        
+
         return null;
     }
-    
+
     /**
      * Удалить файл записи
      */
     public boolean deleteRecording(int recordingId) {
         File file = new File(recordingsFolder, "recording-" + recordingId + ".json");
-        
+
         if (file.exists()) {
             return file.delete();
         }
-        
+
         return false;
     }
-    
+
     /**
      * Проверить, существует ли файл записи
      */
@@ -129,7 +135,7 @@ public class RecordingStorage {
         File file = new File(recordingsFolder, "recording-" + recordingId + ".json");
         return file.exists();
     }
-    
+
     /**
      * Получить размер всех файлов записей в МБ
      */
@@ -137,22 +143,22 @@ public class RecordingStorage {
         if (!recordingsFolder.exists()) {
             return 0;
         }
-        
-        File[] files = recordingsFolder.listFiles((dir, name) -> 
-            name.startsWith("recording-") && name.endsWith(".json"));
-        
+
+        File[] files = recordingsFolder
+                .listFiles((dir, name) -> name.startsWith("recording-") && name.endsWith(".json"));
+
         if (files == null) {
             return 0;
         }
-        
+
         long totalBytes = 0;
         for (File file : files) {
             totalBytes += file.length();
         }
-        
+
         return totalBytes / (1024.0 * 1024.0);
     }
-    
+
     /**
      * Внутренний класс для сериализации записи
      */
@@ -165,7 +171,7 @@ public class RecordingStorage {
         private long endTime;
         private String endReason;
         private List<FrameData> frames;
-        
+
         static RecordingData fromRecording(PlayerRecording recording) {
             RecordingData data = new RecordingData();
             data.id = recording.getId();
@@ -175,49 +181,39 @@ public class RecordingStorage {
             data.startTime = recording.getStartTime();
             data.endTime = recording.getEndTime();
             data.endReason = recording.getEndReason();
-            
+
             data.frames = new ArrayList<>();
             for (RecordFrame frame : recording.getFrames()) {
                 data.frames.add(FrameData.fromFrame(frame));
             }
-            
+
             return data;
         }
-        
+
         PlayerRecording toRecording() {
             // Дополнительное логирование для отладки проблемы с никами
             System.out.println(String.format(
-                "Загрузка записи: ID=%d, UUID=%s, Name=%s, Reason=%s",
-                id, playerId, playerName, reason
-            ));
-            
+                    "Загрузка записи: ID=%d, UUID=%s, Name=%s, Reason=%s",
+                    id, playerId, playerName, reason));
+
             PlayerRecording recording = new PlayerRecording(
-                java.util.UUID.fromString(playerId),
-                playerName,
-                reason,
-                startTime
-            );
-            
-            // Устанавливаем ID через рефлексию (так как он final)
-            try {
-                java.lang.reflect.Field idField = PlayerRecording.class.getDeclaredField("id");
-                idField.setAccessible(true);
-                idField.set(recording, id);
-            } catch (Exception e) {
-                // Игнорируем, будет использован автоматический ID
-            }
-            
+                    id,
+                    java.util.UUID.fromString(playerId),
+                    playerName,
+                    reason,
+                    startTime);
+
             recording.setEndTime(endTime);
             recording.setEndReason(endReason);
-            
+
             for (FrameData frameData : frames) {
                 recording.addFrame(frameData.toFrame());
             }
-            
+
             return recording;
         }
     }
-    
+
     /**
      * Внутренний класс для сериализации кадра
      */
@@ -230,7 +226,7 @@ public class RecordingStorage {
         private double health;
         private int foodLevel;
         private List<BlockEventData> blockEvents;
-        
+
         static FrameData fromFrame(RecordFrame frame) {
             FrameData data = new FrameData();
             data.timestamp = frame.getTimestamp();
@@ -245,29 +241,28 @@ public class RecordingStorage {
             data.flying = frame.isFlying();
             data.health = frame.getHealth();
             data.foodLevel = frame.getFoodLevel();
-            
+
             data.blockEvents = new ArrayList<>();
             for (BlockEvent event : frame.getBlockEvents()) {
                 data.blockEvents.add(BlockEventData.fromEvent(event));
             }
-            
+
             return data;
         }
-        
+
         RecordFrame toFrame() {
             RecordFrame frame = new RecordFrame(
-                timestamp, x, y, z, yaw, pitch, world,
-                sneaking, sprinting, flying, health, foodLevel
-            );
-            
+                    timestamp, x, y, z, yaw, pitch, world,
+                    sneaking, sprinting, flying, health, foodLevel);
+
             for (BlockEventData eventData : blockEvents) {
                 frame.addBlockEvent(eventData.toEvent());
             }
-            
+
             return frame;
         }
     }
-    
+
     /**
      * Внутренний класс для сериализации события блока
      */
@@ -279,7 +274,7 @@ public class RecordingStorage {
         private String blockType;
         private float breakProgress;
         private int entityId;
-        
+
         static BlockEventData fromEvent(BlockEvent event) {
             BlockEventData data = new BlockEventData();
             data.timestamp = event.getTimestamp();
@@ -293,20 +288,19 @@ public class RecordingStorage {
             data.entityId = event.getEntityId();
             return data;
         }
-        
+
         BlockEvent toEvent() {
             return new BlockEvent(
-                timestamp,
-                BlockEvent.EventType.valueOf(type),
-                x, y, z,
-                world,
-                Material.valueOf(blockType),
-                breakProgress,
-                entityId
-            );
+                    timestamp,
+                    BlockEvent.EventType.valueOf(type),
+                    x, y, z,
+                    world,
+                    Material.valueOf(blockType),
+                    breakProgress,
+                    entityId);
         }
     }
-    
+
     /**
      * Адаптер для сериализации Material
      */
@@ -315,7 +309,7 @@ public class RecordingStorage {
         public void write(com.google.gson.stream.JsonWriter out, Material value) throws IOException {
             out.value(value.name());
         }
-        
+
         @Override
         public Material read(com.google.gson.stream.JsonReader in) throws IOException {
             return Material.valueOf(in.nextString());

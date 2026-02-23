@@ -13,6 +13,7 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.Chunk;
 
 import java.util.*;
 
@@ -35,6 +36,7 @@ public class ReplaySession {
     private final Map<String, BlockData> originalBlocks = new HashMap<>(); // Оригинальные блоки в мире
     private final Map<String, Integer> blockBreakingProgress = new HashMap<>(); // Прогресс ломания блоков
     private final Set<String> processedLocations = new HashSet<>(); // Обработанные локации при предзагрузке
+    private final Set<Chunk> forceLoadedChunks = new HashSet<>(); // Чанки, принудительно загруженные для воспроизведения
     
     // Внутренний класс для хранения состояния блока
     private static class BlockState {
@@ -177,8 +179,10 @@ public class ReplaySession {
             // Загружаем чанк если нужно
             String chunkKey = world.getName() + ":" + (x >> 4) + ":" + (z >> 4);
             if (!loadedChunks.contains(chunkKey)) {
-                if (!loc.getChunk().isLoaded()) {
-                    loc.getChunk().load();
+                Chunk chunk = loc.getChunk();
+                if (!chunk.isLoaded()) {
+                    chunk.load();
+                    forceLoadedChunks.add(chunk);
                     chunksLoaded++;
                 }
                 loadedChunks.add(chunkKey);
@@ -283,6 +287,14 @@ public class ReplaySession {
         if (originalGameMode != null) {
             viewer.setGameMode(originalGameMode);
         }
+        
+        // Выгружаем загруженные нами чанки
+        for (Chunk chunk : forceLoadedChunks) {
+            if (chunk.isLoaded()) {
+                chunk.unload(true);
+            }
+        }
+        forceLoadedChunks.clear();
         
         // Очищаем title и tab list
         viewer.resetTitle();
@@ -540,6 +552,12 @@ public class ReplaySession {
             frame.getYaw(),
             frame.getPitch()
         );
+        
+        Chunk chunk = loc.getChunk();
+        if (!chunk.isLoaded()) {
+            chunk.load();
+            forceLoadedChunks.add(chunk);
+        }
         
         viewer.teleport(loc);
     }
