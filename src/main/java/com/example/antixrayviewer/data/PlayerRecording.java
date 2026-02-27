@@ -9,15 +9,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Представляет полную запись движений подозрительного игрока
  */
 public class PlayerRecording {
-
+    
     private static final AtomicInteger ID_COUNTER = new AtomicInteger(1);
-
-    public static void updateIdCounter(int maxId) {
-        if (maxId >= ID_COUNTER.get()) {
-            ID_COUNTER.set(maxId + 1);
-        }
-    }
-
+    
     private final int id;
     private final UUID playerId;
     private final String playerName;
@@ -26,7 +20,7 @@ public class PlayerRecording {
     private long endTime;
     private String endReason;
     private final List<RecordFrame> frames;
-
+    
     public PlayerRecording(UUID playerId, String playerName, String reason, long startTime) {
         this.id = ID_COUNTER.getAndIncrement();
         this.playerId = playerId;
@@ -35,23 +29,14 @@ public class PlayerRecording {
         this.startTime = startTime;
         this.frames = new ArrayList<>();
     }
-
-    public PlayerRecording(int id, UUID playerId, String playerName, String reason, long startTime) {
-        this.id = id;
-        this.playerId = playerId;
-        this.playerName = playerName;
-        this.reason = reason;
-        this.startTime = startTime;
-        this.frames = new ArrayList<>();
-    }
-
+    
     /**
      * Добавить кадр к записи
      */
     public void addFrame(RecordFrame frame) {
         frames.add(frame);
     }
-
+    
     /**
      * Получить длительность записи в миллисекундах
      */
@@ -61,27 +46,27 @@ public class PlayerRecording {
         }
         return endTime - startTime;
     }
-
+    
     /**
      * Получить длительность записи в секундах
      */
     public int getDurationSeconds() {
         return (int) (getDuration() / 1000);
     }
-
+    
     // Геттеры и сеттеры
     public int getId() {
         return id;
     }
-
+    
     public UUID getPlayerId() {
         return playerId;
     }
-
+    
     public String getPlayerName() {
         return playerName;
     }
-
+    
     /**
      * Обновить имя игрока (на случай смены ника)
      */
@@ -91,42 +76,42 @@ public class PlayerRecording {
         // Пока оставляем как есть, так как имя игрока должно оставаться тем,
         // что было в момент записи для исторической точности
     }
-
+    
     public String getReason() {
         return reason;
     }
-
+    
     public long getStartTime() {
         return startTime;
     }
-
+    
     public long getEndTime() {
         return endTime;
     }
-
+    
     public void setEndTime(long endTime) {
         this.endTime = endTime;
     }
-
+    
     public String getEndReason() {
         return endReason;
     }
-
+    
     public void setEndReason(String endReason) {
         this.endReason = endReason;
     }
-
+    
     public List<RecordFrame> getFrames() {
         return new ArrayList<>(frames);
     }
-
+    
     /**
      * Получить количество кадров в записи
      */
     public int getFrameCount() {
         return frames.size();
     }
-
+    
     /**
      * Получить кадр по индексу
      */
