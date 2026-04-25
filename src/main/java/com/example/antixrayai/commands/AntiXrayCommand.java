@@ -4,7 +4,6 @@ import com.example.antixrayai.AntiXrayAI;
 import com.example.antixrayai.data.PlayerRecording;
 import com.example.antixrayai.managers.RecordingManager;
 import com.example.antixrayai.replay.ReplaySession;
-import com.example.antixrayai.replay.SmoothReplaySession;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.ComponentBuilder;
 import net.md_5.bungee.api.chat.HoverEvent;
@@ -23,7 +22,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
     
     private final AntiXrayAI plugin;
     private final RecordingManager recordingManager;
-    private final Map<UUID, Object> replaySessions = new HashMap<>(); // Может быть ReplaySession или SmoothReplaySession
+    private final Map<UUID, ReplaySession> replaySessions = new HashMap<>();
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM HH:mm:ss");
     private static final int RECORDINGS_PER_PAGE = 8; // Количество записей на странице
     
@@ -68,14 +67,10 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
             case "view":
             case "play":
                 if (args.length < 2) {
-                    player.sendMessage("§cИспользование: /" + label + " view <id> [smooth|normal]");
+                    player.sendMessage("§cИспользование: /" + label + " view <id>");
                     return true;
                 }
-                String mode = "normal";
-                if (args.length > 2) {
-                    mode = args[2].toLowerCase();
-                }
-                handleView(player, args[1], mode);
+                handleView(player, args[1]);
                 break;
                 
             case "delete":
@@ -171,7 +166,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         sendNavigationBar(player, page, totalPages);
         
         // Подсказка
-        player.sendMessage("§7Используйте §f/axai view <id> [smooth|normal] §7или кликните на ID");
+        player.sendMessage("§7Используйте §f/axai view <id> §7или кликните на ID");
     }
     
     private void sendNavigationBar(Player player, int currentPage, int totalPages) {
@@ -246,7 +241,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
         }
     }
     
-    private void handleView(Player player, String idStr, String mode) {
+    private void handleView(Player player, String idStr) {
         try {
             int id = Integer.parseInt(idStr);
             PlayerRecording recording = recordingManager.getRecording(id);
@@ -264,32 +259,17 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
             // Останавливаем предыдущую сессию воспроизведения, если есть
             stopReplay(player);
             
-            // Создаем новую сессию воспроизведения в зависимости от режима
-            if (mode.equals("smooth") || mode.equals("s")) {
-                SmoothReplaySession session = new SmoothReplaySession(plugin, player, recording);
-                replaySessions.put(player.getUniqueId(), session);
-                
-                player.sendMessage("§a▶ Начинаю §bплавное§a воспроизведение записи #" + id);
-                player.sendMessage("§7Режим: §bПлавная интерполяция движения");
-                player.sendMessage("§7Игрок: §f" + recording.getPlayerName());
-                player.sendMessage("§7Причина: §e" + recording.getReason());
-                player.sendMessage("§7Длительность: §f" + recording.getDurationSeconds() + " секунд");
-                player.sendMessage("§7Используйте §f/axai stop §7для остановки");
-                
-                session.start();
-            } else {
-                ReplaySession session = new ReplaySession(plugin, player, recording);
-                replaySessions.put(player.getUniqueId(), session);
-                
-                player.sendMessage("§a▶ Начинаю воспроизведение записи #" + id);
-                player.sendMessage("§7Режим: §fОбычный");
-                player.sendMessage("§7Игрок: §f" + recording.getPlayerName());
-                player.sendMessage("§7Причина: §e" + recording.getReason());
-                player.sendMessage("§7Длительность: §f" + recording.getDurationSeconds() + " секунд");
-                player.sendMessage("§7Используйте §f/axai stop §7для остановки");
-                
-                session.start();
-            }
+            // Создаем сессию воспроизведения
+            ReplaySession session = new ReplaySession(plugin, player, recording);
+            replaySessions.put(player.getUniqueId(), session);
+            
+            player.sendMessage("§a▶ Начинаю воспроизведение записи #" + id);
+            player.sendMessage("§7Игрок: §f" + recording.getPlayerName());
+            player.sendMessage("§7Причина: §e" + recording.getReason());
+            player.sendMessage("§7Длительность: §f" + recording.getDurationSeconds() + " секунд");
+            player.sendMessage("§7Используйте §f/axai stop §7для остановки");
+            
+            session.start();
             
         } catch (NumberFormatException e) {
             player.sendMessage("§cНеверный ID записи!");
@@ -357,13 +337,9 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
     }
     
     private boolean stopReplay(Player player) {
-        Object session = replaySessions.remove(player.getUniqueId());
+        ReplaySession session = replaySessions.remove(player.getUniqueId());
         if (session != null) {
-            if (session instanceof ReplaySession) {
-                ((ReplaySession) session).stop();
-            } else if (session instanceof SmoothReplaySession) {
-                ((SmoothReplaySession) session).stop();
-            }
+            session.stop();
             return true;
         }
         return false;
@@ -372,9 +348,7 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
     private void sendHelp(Player player) {
         player.sendMessage("§6═══════════ §eAntiXrayAI §6═══════════");
         player.sendMessage("§f/axai list [страница] §7- список всех записей");
-        player.sendMessage("§f/axai view <id> [smooth|normal] §7- просмотреть запись");
-        player.sendMessage("  §7smooth §b- плавное воспроизведение");
-        player.sendMessage("  §7normal §f- обычное воспроизведение (по умолчанию)");
+        player.sendMessage("§f/axai view <id> §7- просмотреть запись");
         player.sendMessage("§f/axai delete <id> §7- удалить запись");
         player.sendMessage("§f/axai stop §7- остановить просмотр");
         player.sendMessage("§f/axai active §7- активные записи");
@@ -423,26 +397,12 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
             }
         }
         
-        if (args.length == 3) {
-            if (args[0].equalsIgnoreCase("view") || args[0].equalsIgnoreCase("play")) {
-                // Предлагаем режимы воспроизведения
-                return Arrays.asList("smooth", "normal")
-                        .stream()
-                        .filter(s -> s.startsWith(args[2].toLowerCase()))
-                        .collect(Collectors.toList());
-            }
-        }
-        
         return Collections.emptyList();
     }
     
     public void stopAllReplays() {
-        for (Object session : replaySessions.values()) {
-            if (session instanceof ReplaySession) {
-                ((ReplaySession) session).stop();
-            } else if (session instanceof SmoothReplaySession) {
-                ((SmoothReplaySession) session).stop();
-            }
+        for (ReplaySession session : replaySessions.values()) {
+            session.stop();
         }
         replaySessions.clear();
     }

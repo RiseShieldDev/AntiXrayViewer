@@ -360,6 +360,10 @@ public class ReplaySession {
         // Телепортируем зрителя
         teleportToFrame(frame);
         
+        // Повторно отправляем виртуальные блоки рядом со зрителем
+        // (после выгрузки/перезагрузки чанков клиентом фейковые блоки теряются)
+        refreshBlocksNearViewer();
+        
         // Обрабатываем события блоков
         if (frame.hasBlockEvents()) {
             for (BlockEvent event : frame.getBlockEvents()) {
@@ -372,8 +376,67 @@ public class ReplaySession {
     }
     
     /**
-     * Обработать событие блока
+     * Радиус (в блоках), в пределах которого пересинхронизируем виртуальные блоки
+     * около зрителя. ~96 блоков ≈ 6 чанков покрывает типичный render distance клиента.
      */
+    private static final double REFRESH_RADIUS = 96.0;
+    private static final double REFRESH_RADIUS_SQ = REFRESH_RADIUS * REFRESH_RADIUS;
+    
+    /**
+     * Повторно отправить sendBlockChange для всех виртуальных блоков в радиусе зрителя.
+     * Нужно потому, что при удалении зрителя клиент выгружает чанки и при возврате
+     * получает реальное состояние мира с сервера, перетирая фейковые блоки.
+     */
+    private void refreshBlocksNearViewer() {
+        if (blockStates.isEmpty()) return;
+        
+        Location viewerLoc = viewer.getLocation();
+        World viewerWorld = viewerLoc.getWorld();
+        if (viewerWorld == null) return;
+        
+        String viewerWorldName = viewerWorld.getName();
+        double vx = viewerLoc.getX();
+        double vy = viewerLoc.getY();
+        double vz = viewerLoc.getZ();
+        
+        for (Map.Entry<String, BlockState> entry : blockStates.entrySet()) {
+            String blockKey = entry.getKey();
+            BlockState state = entry.getValue();
+            
+            String[] parts = blockKey.split(":");
+            if (parts.length != 4) continue;
+            
+            // Только блоки в текущем мире зрителя
+            if (!parts[0].equals(viewerWorldName)) continue;
+            
+            int bx, by, bz;
+            try {
+                bx = Integer.parseInt(parts[1]);
+                by = Integer.parseInt(parts[2]);
+                bz = Integer.parseInt(parts[3]);
+            } catch (NumberFormatException e) {
+                continue;
+            }
+            
+            double dx = bx - vx;
+            double dy = by - vy;
+            double dz = bz - vz;
+            double distSq = dx * dx + dy * dy + dz * dz;
+            
+            if (distSq > REFRESH_RADIUS_SQ) continue;
+            
+            Location loc = new Location(viewerWorld, bx, by, bz);
+            if (state.exists && state.material != null && state.material != Material.AIR) {
+                BlockData data = state.blockData != null
+                    ? state.blockData
+                    : state.material.createBlockData();
+                viewer.sendBlockChange(loc, data);
+            } else {
+                viewer.sendBlockChange(loc, Material.AIR.createBlockData());
+            }
+        }
+    }
+    
     private void processBlockEvent(BlockEvent event) {
         World world = plugin.getServer().getWorld(event.getWorld());
         if (world == null) return;
