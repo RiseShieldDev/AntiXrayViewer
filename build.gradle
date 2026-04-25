@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'com.example'
-version = '1.4.0'
+version = '1.5.0'
 
 java {
     toolchain.languageVersion.set(JavaLanguageVersion.of(21))
@@ -56,7 +56,7 @@ processResources {
 
 shadowJar {
     archiveClassifier.set('')
-    archiveFileName.set("${project.name}-${project.version}.jar")
+    archiveFileName.set("AntiXrayViewer-${project.version}.jar")
 }
 
 build {

@@ -1,6 +1,6 @@
-# AntiXrayAI - Advanced Anti X-Ray Plugin for Minecraft Paper
+# AntiXrayViewer - Advanced Player Recording Plugin for Minecraft Paper
 
-Продвинутая система обнаружения и записи подозрительной активности игроков для Minecraft Paper 1.21.4.
+Продвинутая система записи и воспроизведения активности игроков для Minecraft Paper 1.21.4.
 
 ## 🎯 Основные возможности
 
@@ -19,16 +19,16 @@
 ## 🛠️ Структура проекта
 
 ```
-AntiXrayAI/
+AntiXrayViewer/
 ├── build.gradle                        # Конфигурация сборки
 ├── settings.gradle                     # Настройки проекта
 ├── src/
 │   └── main/
 │       ├── java/
-│       │   └── com/example/antixrayai/
-│       │       ├── AntiXrayAI.java          # Основной класс плагина
+│       │   └── com/example/antixrayviewer/
+│       │       ├── AntiXrayViewer.java       # Основной класс плагина
 │       │       ├── commands/
-│       │       │   └── AntiXrayCommand.java # Команды администратора
+│       │       │   └── AntiXrayViewerCommand.java # Команды администратора
 │       │       ├── data/
 │       │       │   ├── PlayerRecording.java # Модель записи
 │       │       │   └── RecordFrame.java     # Модель кадра записи
@@ -43,7 +43,7 @@ AntiXrayAI/
 │           └── config.yml              # Конфигурация
 └── build/
     └── libs/
-        └── AntiXrayAI-1.3.0.jar       # Собранный плагин
+        └── AntiXrayViewer-1.4.0.jar   # Собранный плагин
 ```
 
 ## 🚀 Сборка плагина
@@ -62,10 +62,10 @@ gradlew.bat clean build
 
 ## 📦 Установка на сервер
 
-1. Скопируйте файл `AntiXrayAI-1.3.0.jar` из папки `build/libs/`
+1. Скопируйте файл `AntiXrayViewer-1.4.0.jar` из папки `build/libs/`
 2. Поместите его в папку `plugins/` вашего Paper сервера
 3. Перезапустите сервер
-4. Настройте `plugins/AntiXrayAI/config.yml` при необходимости
+4. Настройте `plugins/AntiXrayViewer/config.yml` при необходимости
 
 ## ⚡ Как это работает
 
@@ -79,7 +79,7 @@ gradlew.bat clean build
 - Администраторы получают уведомление о начале записи
 
 ### 3. Просмотр записей администратором
-- Администратор использует команду `/axai view <id>` для просмотра
+- Администратор использует команду `/axv view <id>` для просмотра
 - Переходит в режим наблюдателя и видит всё от лица игрока
 - Может видеть куда смотрел и как двигался игрок в момент записи
 
@@ -92,15 +92,15 @@ gradlew.bat clean build
 
 | Команда | Описание | Права |
 |---------|----------|-------|
-| `/axai list` | Список всех сохранённых записей | `antixrayai.admin` |
-| `/axai view <id> [smooth\|normal]` | Просмотреть запись (плавно/обычно) | `antixrayai.admin` |
-| `/axai delete <id>` | Удалить запись | `antixrayai.admin` |
-| `/axai stop` | Остановить текущий просмотр | `antixrayai.admin` |
-| `/axai active` | Показать активные записи | `antixrayai.admin` |
-| `/axai reload` | Синхронизировать записи с файлами | `antixrayai.admin` |
-| `/axai help` | Справка по командам | `antixrayai.admin` |
+| `/axv list` | Список всех сохранённых записей | `antixrayviewer.admin` |
+| `/axv view <id>` | Просмотреть запись | `antixrayviewer.admin` |
+| `/axv delete <id>` | Удалить запись | `antixrayviewer.admin` |
+| `/axv stop` | Остановить текущий просмотр | `antixrayviewer.admin` |
+| `/axv active` | Показать активные записи | `antixrayviewer.admin` |
+| `/axv reload` | Синхронизировать записи с файлами | `antixrayviewer.admin` |
+| `/axv help` | Справка по командам | `antixrayviewer.admin` |
 
-Алиасы: `/antixray`, `/axai`
+Алиасы: `/antixrayviewer`, `/axv`, `/av`
 
 ## ⚙️ Конфигурация
 
@@ -121,10 +121,10 @@ recording:
 
 ## 📝 Разрешения (Permissions)
 
-- `antixrayai.*` - полный доступ ко всем командам (op)
-- `antixrayai.admin` - доступ к командам администратора (op)
-- `antixrayai.use` - базовые команды (по умолчанию: true)
-- `antixrayai.reload` - перезагрузка конфигурации (op)
+- `antixrayviewer.*` - полный доступ ко всем командам (op)
+- `antixrayviewer.admin` - доступ к командам администратора (op)
+- `antixrayviewer.use` - базовые команды (по умолчанию: true)
+- `antixrayviewer.reload` - перезагрузка конфигурации (op)
 
 ## 📊 Информация при просмотре записи
 
@@ -134,6 +134,12 @@ recording:
 - **Title**: информация о начале/конце воспроизведения
 
 ## 🔄 История изменений
+
+### v1.4.0 - Обновление плагина (16.09.2025)
+- ✅ **Обновление плагина** - теперь плагин называется AntiXrayViewer
+- ✅ **Обновление команд** - теперь команды начинаются с `/axv`
+- ✅ **Обновление разрешений** - теперь разрешения начинаются с `antixrayviewer`
+- ✅ **Обновление конфигурации** - теперь конфигурация находится в `config.yml`
 
 ### v1.3.0 - Плавное воспроизведение записей (16.09.2025)
 - ✅ **Добавлен режим плавного воспроизведения** - камера движется плавно между кадрами без телепортации
@@ -175,8 +181,8 @@ recording:
 
 1. **Для администраторов:**
    - Получайте автоматические уведомления о подозрительной активности
-   - Используйте `/axai list` для просмотра всех записей
-   - Используйте `/axai view <id>` для просмотра конкретной записи
+   - Используйте `/axv list` для просмотра всех записей
+   - Используйте `/axv view <id>` для просмотра конкретной записи
    - Во время просмотра вы будете в режиме наблюдателя
 
 2. **Для игроков:**
@@ -201,15 +207,15 @@ recording:
 ## 📄 Лицензия
 
 Автор: NikitaRTN  
-GitHub: https://github.com/NikitaRTN
+GitHub: https://github.com/RiseShieldDev/AntiXrayViewer
 
 ## 🤝 Поддержка
 
-При возникновении проблем создайте issue на GitHub: https://github.com/NikitaRTN/AntiXrayAI
+При возникновении проблем создайте issue на GitHub: https://github.com/RiseShieldDev/AntiXrayViewer
 
 ## 💡 Советы по использованию
 
 1. **Настройка порогов**: Отрегулируйте пороги в config.yml в зависимости от вашего сервера
-2. **Проверка записей**: Регулярно проверяйте список записей командой `/axai list`
-3. **Быстрый просмотр**: После уведомления сразу используйте `/axai view <id>`
-4. **Очистка записей**: Удаляйте старые записи командой `/axai delete <id>`
+2. **Проверка записей**: Регулярно проверяйте список записей командой `/axv list`
+3. **Быстрый просмотр**: После уведомления сразу используйте `/axv view <id>`
+4. **Очистка записей**: Удаляйте старые записи командой `/axv delete <id>`

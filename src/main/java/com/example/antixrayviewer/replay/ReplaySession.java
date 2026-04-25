@@ -1,9 +1,9 @@
-package com.example.antixrayai.replay;
+package com.example.antixrayviewer.replay;
 
-import com.example.antixrayai.AntiXrayAI;
-import com.example.antixrayai.data.PlayerRecording;
-import com.example.antixrayai.data.RecordFrame;
-import com.example.antixrayai.data.BlockEvent;
+import com.example.antixrayviewer.AntiXrayViewer;
+import com.example.antixrayviewer.data.PlayerRecording;
+import com.example.antixrayviewer.data.RecordFrame;
+import com.example.antixrayviewer.data.BlockEvent;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -21,7 +21,7 @@ import java.util.*;
  */
 public class ReplaySession {
     
-    private final AntiXrayAI plugin;
+    private final AntiXrayViewer plugin;
     private final Player viewer;
     private final PlayerRecording recording;
     private BukkitTask replayTask;
@@ -51,7 +51,7 @@ public class ReplaySession {
         }
     }
     
-    public ReplaySession(AntiXrayAI plugin, Player viewer, PlayerRecording recording) {
+    public ReplaySession(AntiXrayViewer plugin, Player viewer, PlayerRecording recording) {
         this.plugin = plugin;
         this.viewer = viewer;
         this.recording = recording;

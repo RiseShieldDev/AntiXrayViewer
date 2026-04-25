@@ -1,5 +1,5 @@
-# AntiXrayAI Configuration
-# Система обнаружения и записи подозрительной активности
+# AntiXrayViewer Configuration
+# Система записи и воспроизведения активности игроков
 
 # Пороговые значения для обнаружения подозрительной активности
 thresholds:
@@ -31,9 +31,9 @@ notifications:
 
 # Сообщения плагина
 messages:
-  detection: "§c[AntiXrayAI] §e⚠ Подозрение: §f{player} §7- {reason}"
-  recording-started: "§a[AntiXrayAI] §7Начата запись игрока §f{player}"
-  recording-completed: "§a[AntiXrayAI] §7Запись завершена. ID: §b#{id}"
+  detection: "§c[AntiXrayViewer] §e⚠ Подозрение: §f{player} §7- {reason}"
+  recording-started: "§a[AntiXrayViewer] §7Начата запись игрока §f{player}"
+  recording-completed: "§a[AntiXrayViewer] §7Запись завершена. ID: §b#{id}"
 
 # Дополнительные настройки
 settings:
