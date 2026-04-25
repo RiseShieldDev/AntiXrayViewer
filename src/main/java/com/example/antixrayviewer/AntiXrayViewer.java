@@ -3,9 +3,10 @@ package com.example.antixrayviewer;
 import com.example.antixrayviewer.commands.AntiXrayViewerCommand;
 import com.example.antixrayviewer.listeners.OreBreakListener;
 import com.example.antixrayviewer.managers.RecordingManager;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
 
 public class AntiXrayViewer extends JavaPlugin {
@@ -41,8 +42,7 @@ public class AntiXrayViewer extends JavaPlugin {
         
         // Отправка сообщения в консоль сервера
         Bukkit.getConsoleSender().sendMessage(
-            ChatColor.GREEN + "[AntiXrayViewer] " + 
-            ChatColor.YELLOW + "Система просмотра активирована!"
+            Component.text("[AntiXrayViewer] ", NamedTextColor.GREEN).append(Component.text("Система просмотра активирована!", NamedTextColor.YELLOW))
         );
         
         // Информация о конфигурации
@@ -65,16 +65,13 @@ public class AntiXrayViewer extends JavaPlugin {
             commandHandler.stopAllReplays();
         }
         
-        // Сообщение при выключении плагина
         getLogger().info("╔════════════════════════════════════╗");
         getLogger().info("║  AntiXrayViewer v" + getPluginMeta().getVersion() + " disabled!   ║");
         getLogger().info("║      All recordings saved!         ║");
         getLogger().info("╚════════════════════════════════════╝");
         
-        // Отправка сообщения в консоль сервера
         Bukkit.getConsoleSender().sendMessage(
-            ChatColor.RED + "[AntiXrayViewer] " + 
-            ChatColor.YELLOW + "Плагин отключен. Все записи сохранены."
+            Component.text("[AntiXrayViewer] ", NamedTextColor.RED).append(Component.text("Плагин отключен. Все записи сохранены.", NamedTextColor.YELLOW))
         );
     }
     

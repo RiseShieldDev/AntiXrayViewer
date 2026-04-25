@@ -4,6 +4,9 @@ import com.example.antixrayviewer.AntiXrayViewer;
 import com.example.antixrayviewer.data.PlayerRecording;
 import com.example.antixrayviewer.data.RecordFrame;
 import com.example.antixrayviewer.data.BlockEvent;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.title.Title;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -14,6 +17,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.time.Duration;
 import java.util.*;
 
 /**
@@ -82,11 +86,7 @@ public class ReplaySession {
         }
         
         // Показываем информацию о загрузке
-        viewer.sendTitle(
-            "§eЗагрузка записи...",
-            "§7Анализ блоков и загрузка чанков",
-            10, 60, 10
-        );
+        viewer.showTitle(Title.title(Component.text("Загрузка записи...", NamedTextColor.YELLOW), Component.text("Анализ блоков и загрузка чанков", NamedTextColor.GRAY), Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(3), Duration.ofMillis(500))));
         
         // Задержка для загрузки чанков и анализа блоков
         new BukkitRunnable() {
@@ -100,11 +100,7 @@ public class ReplaySession {
                     @Override
                     public void run() {
                         // Показываем информацию о начале воспроизведения
-                        viewer.sendTitle(
-                            "§aВоспроизведение записи",
-                            "§7Игрок: §f" + recording.getPlayerName(),
-                            10, 70, 20
-                        );
+                        viewer.showTitle(Title.title(Component.text("Воспроизведение записи", NamedTextColor.GREEN), Component.text("Игрок: " + recording.getPlayerName(), NamedTextColor.GRAY), Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(3), Duration.ofMillis(1000))));
                         
                         // Запускаем воспроизведение
                         startReplayTask();
@@ -292,8 +288,8 @@ public class ReplaySession {
         
         // Очищаем title и tab list
         viewer.resetTitle();
-        viewer.setPlayerListHeader("");
-        viewer.setPlayerListFooter("");
+        viewer.sendPlayerListHeader(Component.empty());
+        viewer.sendPlayerListFooter(Component.empty());
         
         // Сообщение об остановке
         viewer.sendMessage("§7Воспроизведение остановлено.");
@@ -339,11 +335,7 @@ public class ReplaySession {
             public void run() {
                 if (currentFrameIndex >= recording.getFrameCount()) {
                     viewer.sendMessage("§aВоспроизведение завершено!");
-                    viewer.sendTitle(
-                        "§aВоспроизведение завершено",
-                        "§7Всего кадров: §f" + recording.getFrameCount(),
-                        10, 40, 20
-                    );
+                    viewer.showTitle(Title.title(Component.text("Воспроизведение завершено", NamedTextColor.GREEN), Component.text("Всего кадров: " + recording.getFrameCount(), NamedTextColor.GRAY), Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(2), Duration.ofMillis(1000))));
                     stop();
                     return;
                 }
@@ -378,7 +370,7 @@ public class ReplaySession {
         }
         
         // Показываем состояние игрока
-        viewer.sendActionBar(buildStatusString(frame));
+        viewer.sendActionBar(Component.text(buildStatusString(frame)));
     }
     
     /**
@@ -692,7 +684,7 @@ public class ReplaySession {
             breakingBlocks
         );
         
-        viewer.setPlayerListFooter(progressText);
+        viewer.sendPlayerListFooter(Component.text(progressText));
     }
     
     // Геттеры
