@@ -6,7 +6,6 @@ import com.example.antixrayviewer.data.RecordFrame;
 import com.example.antixrayviewer.data.BlockEvent;
 import com.example.antixrayviewer.storage.RecordingStorage;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;

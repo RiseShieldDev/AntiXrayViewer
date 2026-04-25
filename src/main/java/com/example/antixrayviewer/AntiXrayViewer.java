@@ -35,7 +35,7 @@ public class AntiXrayViewer extends JavaPlugin {
         
         // Сообщение при включении плагина
         getLogger().info("╔════════════════════════════════════╗");
-        getLogger().info("║   AntiXrayViewer v" + getDescription().getVersion() + " enabled!  ║");
+        getLogger().info("║   AntiXrayViewer v" + getPluginMeta().getVersion() + " enabled!  ║");
         getLogger().info("║   Anti X-Ray viewer system active!  ║");
         getLogger().info("╚════════════════════════════════════╝");
         
@@ -67,7 +67,7 @@ public class AntiXrayViewer extends JavaPlugin {
         
         // Сообщение при выключении плагина
         getLogger().info("╔════════════════════════════════════╗");
-        getLogger().info("║  AntiXrayViewer v" + getDescription().getVersion() + " disabled!   ║");
+        getLogger().info("║  AntiXrayViewer v" + getPluginMeta().getVersion() + " disabled!   ║");
         getLogger().info("║      All recordings saved!         ║");
         getLogger().info("╚════════════════════════════════════╝");
         

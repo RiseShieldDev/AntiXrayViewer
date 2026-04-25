@@ -149,6 +149,12 @@ public class ReplaySession {
                             }
                             finalBlockStates.put(blockKey, event.getBlockType());
                             break;
+                            
+                        case BREAK_CANCEL:
+                        case BREAK_START:
+                        case BREAK_PROGRESS:
+                            // Эти события не требуют обработки при предзагрузке
+                            break;
                     }
                 }
             }
@@ -504,8 +510,6 @@ public class ReplaySession {
                 
             case PLACE:
                 // Установка блока
-                BlockState currentState = blockStates.get(blockKey);
-                
                 // Обновляем состояние
                 blockStates.put(blockKey, new BlockState(event.getBlockType(), true));
                 
