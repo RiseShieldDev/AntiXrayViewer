@@ -218,7 +218,8 @@ public class RecordingManager implements Listener {
     private void notifyAdminsRecordingComplete(PlayerRecording recording) {
         String message = String.format(
             "§a[AntiXrayViewer] §7Запись игрока §f%s §7завершена. " +
-            "§7Кадров: §e%d §7| ID: §b#%d §7| §f/axai view %d",
+            "§7Кадров: §e%d §7| ID: §b#%d §7| §f/axv view %d",
+
             recording.getPlayerName(),
             recording.getFrames().size(),
             recording.getId(),
@@ -226,7 +227,8 @@ public class RecordingManager implements Listener {
         );
         
         plugin.getServer().getOnlinePlayers().stream()
-            .filter(p -> p.hasPermission("AntiXrayViewer.admin"))
+            .filter(p -> p.hasPermission("antixrayviewer.admin"))
+
             .forEach(admin -> admin.sendMessage(message));
     }
     

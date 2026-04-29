@@ -29,6 +29,16 @@ public class PlayerRecording {
         this.startTime = startTime;
         this.frames = new ArrayList<>();
     }
+
+    public PlayerRecording(int id, UUID playerId, String playerName, String reason, long startTime) {
+        this.id = id;
+        this.playerId = playerId;
+        this.playerName = playerName;
+        this.reason = reason;
+        this.startTime = startTime;
+        this.frames = new ArrayList<>();
+        ID_COUNTER.updateAndGet(current -> Math.max(current, id + 1));
+    }
     
     /**
      * Добавить кадр к записи

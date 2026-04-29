@@ -151,7 +151,7 @@ public class OreBreakListener implements Listener {
                 suspect.getName(), reason);
 
         plugin.getServer().getOnlinePlayers().stream()
-                .filter(p -> p.hasPermission("AntiXrayViewer.admin"))
+                .filter(p -> p.hasPermission("antixrayviewer.admin"))
                 .forEach(admin -> admin.sendMessage(message));
 
         plugin.getServer().getConsoleSender().sendMessage(message);
