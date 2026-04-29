@@ -30,7 +30,9 @@ public class RecordingStorage {
         
         // Создаем папку для записей, если её нет
         if (!recordingsFolder.exists()) {
-            recordingsFolder.mkdirs();
+            if (!recordingsFolder.mkdirs()) {
+                plugin.getLogger().severe("Не удалось создать папку записей: " + recordingsFolder.getAbsolutePath());
+            }
         }
         
         // Настраиваем Gson с красивым форматированием
@@ -52,6 +54,7 @@ public class RecordingStorage {
             // Конвертируем запись в JSON
             RecordingData data = RecordingData.fromRecording(recording);
             gson.toJson(data, writer);
+            plugin.getLogger().info("Запись #" + recording.getId() + " сохранена в файл: " + file.getAbsolutePath());
             return true;
             
         } catch (IOException e) {
@@ -186,26 +189,20 @@ public class RecordingStorage {
         
         PlayerRecording toRecording() {
             PlayerRecording recording = new PlayerRecording(
+                id,
                 java.util.UUID.fromString(playerId),
                 playerName,
                 reason,
                 startTime
             );
             
-            // Устанавливаем ID через рефлексию (так как он final)
-            try {
-                java.lang.reflect.Field idField = PlayerRecording.class.getDeclaredField("id");
-                idField.setAccessible(true);
-                idField.set(recording, id);
-            } catch (Exception e) {
-                // Игнорируем, будет использован автоматический ID
-            }
-            
             recording.setEndTime(endTime);
             recording.setEndReason(endReason);
             
-            for (FrameData frameData : frames) {
-                recording.addFrame(frameData.toFrame());
+            if (frames != null) {
+                for (FrameData frameData : frames) {
+                    recording.addFrame(frameData.toFrame());
+                }
             }
             
             return recording;
@@ -254,8 +251,10 @@ public class RecordingStorage {
                 sneaking, sprinting, flying, health, foodLevel
             );
             
-            for (BlockEventData eventData : blockEvents) {
-                frame.addBlockEvent(eventData.toEvent());
+            if (blockEvents != null) {
+                for (BlockEventData eventData : blockEvents) {
+                    frame.addBlockEvent(eventData.toEvent());
+                }
             }
             
             return frame;

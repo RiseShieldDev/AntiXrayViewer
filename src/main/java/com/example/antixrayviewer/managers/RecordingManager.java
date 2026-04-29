@@ -200,10 +200,14 @@ public class RecordingManager implements Listener {
      * Сохранить запись в хранилище
      */
     private void saveRecording(PlayerRecording recording) {
-        completedRecordings.add(0, recording); // Добавляем в начало списка
-        
         // Сохраняем в файл
-        storage.saveRecording(recording);
+        boolean saved = storage.saveRecording(recording);
+        if (!saved) {
+            plugin.getLogger().severe("Запись #" + recording.getId() + " не была добавлена в список, потому что файл не сохранился");
+            return;
+        }
+        
+        completedRecordings.add(0, recording); // Добавляем в начало списка
         
         // Ограничиваем количество сохраненных записей
         while (completedRecordings.size() > maxSavedRecordings) {
