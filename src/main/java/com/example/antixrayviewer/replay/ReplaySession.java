@@ -67,6 +67,8 @@ public final class ReplaySession {
     private int cursor;
     private int tickCounter;
     private boolean stopped;
+    /** Сколько тиков ещё ждём загрузки мира клиентом перед стартом воспроизведения. */
+    private int warmupTicks;
 
     private Location returnLocation;
     private GameMode returnGameMode;
@@ -114,11 +116,21 @@ public final class ReplaySession {
         }
 
         clock = rangeStart;
-        applyFullState(clock);
-        camera.update(clock, true);
 
-        bossBar = BossBar.bossBar(Component.text("Запись"), 0f, BossBar.Color.BLUE, BossBar.Overlay.NOTCHED_20);
+        // ПОРЯДОК ВАЖЕН: сначала переносим камеру, и только потом считаем блоки.
+        // Раньше состояние накладывалось от старой позиции зрителя: блоки записи
+        // оказывались вне радиуса отправки и отбрасывались, а зритель видел реальный мир
+        // — то есть уже сломанные блоки, будто запись уже прошла.
+        camera.update(clock, true);
+        applyFullState(clock);
+        blocks.resync();
+
+        bossBar = BossBar.bossBar(Component.text("Загрузка записи…"), 0f, BossBar.Color.YELLOW, BossBar.Overlay.NOTCHED_20);
         viewer.showBossBar(bossBar);
+
+        // Пока клиент после телепорта получает чанки, воспроизведение стоит:
+        // пакеты изменения блоков, отправленные раньше самого чанка, клиент затирает.
+        warmupTicks = Math.max(0, plugin.getConfig().getInt("replay.performance.start-delay-ticks", 40));
 
         updateFooter();
         sendPanel();
@@ -185,6 +197,27 @@ public final class ReplaySession {
             return;
         }
 
+        if (warmupTicks > 0) {
+            // Ждём загрузку мира у клиента и всё это время повторно отправляем блоки
+            warmupTicks--;
+            if (warmupTicks % 10 == 0) {
+                blocks.resync();
+            }
+            blocks.flush();
+            if (warmupTicks % 4 == 0) {
+                viewer.sendActionBar(Component.text("⏳ Загрузка записи… блоков: " + blocks.getTrackedBlocks(),
+                        NamedTextColor.YELLOW));
+            }
+            if (warmupTicks == 0) {
+                camera.update(clock, true);
+                applyFullState(clock);
+                blocks.resync();
+                blocks.flush();
+                updateHud();
+            }
+            return;
+        }
+
         if (!paused) {
             long previous = clock;
             clock += (long) Math.round(TICK_MS * speed);
@@ -216,6 +249,10 @@ public final class ReplaySession {
 
         if (++tickCounter % 4 == 0) {
             updateHud();
+        }
+        if (tickCounter % 20 == 0) {
+            // Страховка от потерянных пакетов: блоки, которые должны быть видны, но не отправлены
+            blocks.revalidate();
         }
     }
 
@@ -271,6 +308,8 @@ public final class ReplaySession {
 
         clearAllBreakAnimations();
         camera.update(clock, true);
+        // После перемотки камера могла уехать далеко — добираем блоки, которые теперь рядом
+        blocks.revalidate();
         blocks.flush();
         if (!silent) {
             updateHud();
@@ -527,6 +566,17 @@ public final class ReplaySession {
         blocks.onChunkSent(chunkX, chunkZ);
     }
 
+    /**
+     * Принудительно пересобрать и переотправить весь виртуальный слой блоков.
+     * Нужно, если клиент всё же не успел прогрузиться и видны реальные блоки мира.
+     */
+    public int resyncBlocks() {
+        applyFullState(clock);
+        int queued = blocks.resync();
+        blocks.flush();
+        return queued;
+    }
+
     // ===================== Интерфейс =====================
 
     private void updateHud() {
@@ -701,6 +751,8 @@ public final class ReplaySession {
                         .decorate(TextDecoration.BOLD))
                 .append(Component.text(" ▬▬▬ ", NamedTextColor.DARK_GRAY))
                 .append(button("↻", "/axv panel", "Обновить панель"))
+                .append(space)
+                .append(button("⭮ Блоки", "/axv resync", "Перерисовать блоки записи, если мир не прогрузился"))
                 .append(space)
                 .append(button("■", "/axv stop", "Завершить просмотр")));
 

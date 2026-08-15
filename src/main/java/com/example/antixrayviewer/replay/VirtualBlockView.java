@@ -114,7 +114,8 @@ public final class VirtualBlockView {
 
             if (ref.distanceSquared(px, py, pz) > renderDistanceSq) {
                 // Слишком далеко — клиент всё равно выгрузит чанк.
-                // Сбрасываем отметку об отправленном и ждём события загрузки чанка.
+                // Сбрасываем отметку об отправленном: блок вернётся в очередь через
+                // onChunkSent() или revalidate(), когда зритель окажется рядом.
                 sent.remove(ref);
                 continue;
             }
@@ -171,6 +172,54 @@ public final class VirtualBlockView {
             sent.remove(ref);
             enqueue(ref);
         }
+    }
+
+    /**
+     * Периодическая проверка: вернуть в очередь всё, что должно быть видно рядом,
+     * но фактически клиенту не отправлено: блок был далеко в момент flush(),
+     * зритель к нему переместился, либо чанк пришёл позже пакета изменения.
+     */
+    public int revalidate() {
+        if (!viewer.isOnline() || desired.isEmpty()) {
+            return 0;
+        }
+        String worldName = viewer.getWorld().getName();
+        double px = viewer.getLocation().getX();
+        double py = viewer.getLocation().getY();
+        double pz = viewer.getLocation().getZ();
+
+        int restored = 0;
+        for (Map.Entry<BlockRef, BlockData> entry : desired.entrySet()) {
+            BlockRef ref = entry.getKey();
+            if (!worldName.equals(ref.getWorld())) {
+                continue;
+            }
+            if (ref.distanceSquared(px, py, pz) > renderDistanceSq) {
+                continue;
+            }
+            BlockData alreadySent = sent.get(ref);
+            if (alreadySent != null && alreadySent.matches(entry.getValue())) {
+                continue;
+            }
+            enqueue(ref);
+            restored++;
+        }
+        return restored;
+    }
+
+    /**
+     * Полная переотправка: считаем, что клиент не видит ничего из виртуального слоя.
+     * Нужна после телепорта и пока клиент догружает мир: пакеты изменения блоков,
+     * отправленные раньше самого чанка, затираются реальными данными мира.
+     */
+    public int resync() {
+        sent.clear();
+        queue.clear();
+        queued.clear();
+        for (BlockRef ref : desired.keySet()) {
+            enqueue(ref);
+        }
+        return queue.size();
     }
 
     /**

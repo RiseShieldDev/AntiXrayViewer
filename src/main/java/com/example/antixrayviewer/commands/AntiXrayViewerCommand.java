@@ -231,6 +231,15 @@ public class AntiXrayViewerCommand implements CommandExecutor, TabCompleter {
                 }
                 return true;
             }
+            case "resync":
+            case "синх": {
+                ReplaySession session = requireSession(player);
+                if (session != null) {
+                    int queued = session.resyncBlocks();
+                    feedback(player, "Блоки отправлены заново: " + queued);
+                }
+                return true;
+            }
             case "follow":
             case "кигроку": {
                 ReplaySession session = requireSession(player);
@@ -392,6 +401,7 @@ public class AntiXrayViewerCommand implements CommandExecutor, TabCompleter {
         help(player, "/axv marker next|prev", "прыжок к добыче руды");
         help(player, "/axv camera <first|third|free>", "режим камеры");
         help(player, "/axv follow", "перенести свободную камеру к игроку");
+        help(player, "/axv resync", "перерисовать блоки, если мир не прогрузился");
         help(player, "/axv range a|b|clear", "отметить отрезок по текущему времени");
         help(player, "/axv panel", "панель управления с кнопками");
         help(player, "/axv stop", "завершить просмотр");
@@ -503,8 +513,8 @@ public class AntiXrayViewerCommand implements CommandExecutor, TabCompleter {
         List<String> result = new ArrayList<>();
         if (args.length == 1) {
             for (String candidate : Arrays.asList("list", "view", "stop", "pause", "speed", "seek", "jump", "range",
-                    "loop", "marker", "camera", "follow", "panel", "timeline", "info", "active", "delete", "reload",
-                    "help")) {
+                    "loop", "marker", "camera", "follow", "resync", "panel", "timeline", "info", "active", "delete",
+                    "reload", "help")) {
                 if (candidate.startsWith(args[0].toLowerCase(Locale.ROOT))) {
                     result.add(candidate);
                 }

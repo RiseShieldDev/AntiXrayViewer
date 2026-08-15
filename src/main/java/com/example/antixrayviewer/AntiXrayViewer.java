@@ -103,6 +103,7 @@ public class AntiXrayViewer extends JavaPlugin {
         config.addDefault("replay.performance.block-updates-per-tick", 256);
         config.addDefault("replay.performance.block-render-distance", 96.0);
         config.addDefault("replay.performance.break-animation-distance", 48.0);
+        config.addDefault("replay.performance.start-delay-ticks", 40);
         
         config.addDefault("replay.playback.default-speed", 1.0);
         config.addDefault("replay.playback.max-speed", 8.0);
