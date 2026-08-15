@@ -106,6 +106,13 @@ public class PlayerRecording {
     }
     
     /**
+     * Получить кадры без копирования списка (для горячих циклов воспроизведения).
+     */
+    public List<RecordFrame> getFramesView() {
+        return java.util.Collections.unmodifiableList(frames);
+    }
+    
+    /**
      * Получить количество кадров в записи
      */
     public int getFrameCount() {

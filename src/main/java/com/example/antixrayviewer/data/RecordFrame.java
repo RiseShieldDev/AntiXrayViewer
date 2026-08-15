@@ -56,6 +56,13 @@ public class RecordFrame {
     }
     
     /**
+     * Получить события блоков без копирования списка (для горячих циклов).
+     */
+    public List<BlockEvent> getBlockEventsView() {
+        return java.util.Collections.unmodifiableList(blockEvents);
+    }
+    
+    /**
      * Проверить, есть ли события блоков в этом кадре
      */
     public boolean hasBlockEvents() {

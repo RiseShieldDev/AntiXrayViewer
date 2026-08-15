@@ -272,6 +272,9 @@ public class RecordingStorage {
         private String blockType;
         private float breakProgress;
         private int entityId;
+        // Полное состояние блока (может отсутствовать в старых записях)
+        private String blockData;
+        private String previousBlockData;
         
         static BlockEventData fromEvent(BlockEvent event) {
             BlockEventData data = new BlockEventData();
@@ -284,6 +287,8 @@ public class RecordingStorage {
             data.blockType = event.getBlockType().name();
             data.breakProgress = event.getBreakProgress();
             data.entityId = event.getEntityId();
+            data.blockData = event.getBlockDataString();
+            data.previousBlockData = event.getPreviousBlockDataString();
             return data;
         }
         
@@ -295,7 +300,9 @@ public class RecordingStorage {
                 world,
                 Material.valueOf(blockType),
                 breakProgress,
-                entityId
+                entityId,
+                blockData,
+                previousBlockData
             );
         }
     }

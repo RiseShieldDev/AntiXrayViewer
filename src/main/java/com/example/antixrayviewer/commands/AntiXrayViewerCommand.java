@@ -3,11 +3,15 @@ package com.example.antixrayviewer.commands;
 import com.example.antixrayviewer.AntiXrayViewer;
 import com.example.antixrayviewer.data.PlayerRecording;
 import com.example.antixrayviewer.managers.RecordingManager;
+import com.example.antixrayviewer.replay.CameraMode;
+import com.example.antixrayviewer.replay.ReplayManager;
 import com.example.antixrayviewer.replay.ReplaySession;
-import net.md_5.bungee.api.chat.ClickEvent;
-import net.md_5.bungee.api.chat.ComponentBuilder;
-import net.md_5.bungee.api.chat.HoverEvent;
-import net.md_5.bungee.api.chat.TextComponent;
+import com.example.antixrayviewer.replay.ReplayTimeline;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -15,395 +19,529 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
 import java.text.SimpleDateFormat;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
 
+/**
+ * Обработчик команд плагина.
+ *
+ * Сессии просмотра больше не хранятся здесь — за них отвечает ReplayManager,
+ * который гарантированно чистит их при выходе игрока и выключении сервера.
+ */
 public class AntiXrayViewerCommand implements CommandExecutor, TabCompleter {
-    
+
+    private static final int RECORDINGS_PER_PAGE = 8;
+
     private final AntiXrayViewer plugin;
     private final RecordingManager recordingManager;
-    private final Map<UUID, ReplaySession> replaySessions = new HashMap<>();
+    private final ReplayManager replayManager;
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM HH:mm:ss");
-    private static final int RECORDINGS_PER_PAGE = 8; // Количество записей на странице
-    
-    public AntiXrayViewerCommand(AntiXrayViewer plugin, RecordingManager recordingManager) {
+
+    public AntiXrayViewerCommand(AntiXrayViewer plugin, RecordingManager recordingManager, ReplayManager replayManager) {
         this.plugin = plugin;
         this.recordingManager = recordingManager;
+        this.replayManager = replayManager;
     }
-    
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("§cЭта команда доступна только игрокам!");
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage("Эта команда доступна только игрокам.");
             return true;
         }
-        
-        Player player = (Player) sender;
-        
-        if (!player.hasPermission("antixrayviewer.admin")) {
-            player.sendMessage("§cУ вас нет прав для использования этой команды!");
-            return true;
-        }
-        
+
         if (args.length == 0) {
             sendHelp(player);
             return true;
         }
-        
-        switch (args[0].toLowerCase()) {
+
+        String sub = args[0].toLowerCase(Locale.ROOT);
+        switch (sub) {
             case "list":
-                int page = 1;
-                if (args.length > 1) {
-                    try {
-                        page = Integer.parseInt(args[1]);
-                    } catch (NumberFormatException e) {
-                        player.sendMessage("§cНеверный номер страницы!");
-                        return true;
-                    }
-                }
-                handleList(player, page);
-                break;
-                
+            case "список":
+                handleList(player, args.length > 1 ? parseInt(args[1], 1) : 1);
+                return true;
             case "view":
             case "play":
+            case "смотреть":
                 if (args.length < 2) {
-                    player.sendMessage("§cИспользование: /" + label + " view <id>");
+                    error(player, "Использование: /axv view <id>");
                     return true;
                 }
                 handleView(player, args[1]);
-                break;
-                
+                return true;
+            case "stop":
+                if (!replayManager.stop(player)) {
+                    error(player, "У вас нет активного просмотра.");
+                }
+                return true;
+            case "pause":
+            case "resume": {
+                ReplaySession session = requireSession(player);
+                if (session != null) {
+                    session.togglePause();
+                    feedback(player, session.isPaused() ? "⏸ Пауза." : "▶ Воспроизведение.");
+                }
+                return true;
+            }
+            case "speed": {
+                ReplaySession session = requireSession(player);
+                if (session == null) {
+                    return true;
+                }
+                if (args.length < 2) {
+                    error(player, "Использование: /axv speed <0.1-8, можно отрицательную для реверса>");
+                    return true;
+                }
+                double value = parseDouble(args[1], Double.NaN);
+                if (Double.isNaN(value) || value == 0) {
+                    error(player, "Неверное значение скорости.");
+                    return true;
+                }
+                session.setSpeed(value);
+                feedback(player, "Скорость: x" + session.getSpeed());
+                return true;
+            }
+            case "seek": {
+                ReplaySession session = requireSession(player);
+                if (session == null) {
+                    return true;
+                }
+                if (args.length < 2) {
+                    error(player, "Использование: /axv seek <время>, например 45 или 1:30");
+                    return true;
+                }
+                long time = parseTime(args[1], -1L);
+                if (time < 0) {
+                    error(player, "Не понял время. Примеры: 45, 1:30, 2m10s");
+                    return true;
+                }
+                session.seek(time);
+                feedback(player, "Переход к " + ReplaySession.formatTime(session.getClock()));
+                return true;
+            }
+            case "jump":
+            case "skip": {
+                ReplaySession session = requireSession(player);
+                if (session == null) {
+                    return true;
+                }
+                if (args.length < 2) {
+                    error(player, "Использование: /axv jump <±секунды>");
+                    return true;
+                }
+                double seconds = parseDouble(args[1], Double.NaN);
+                if (Double.isNaN(seconds)) {
+                    error(player, "Нужно число секунд, например -10 или 5");
+                    return true;
+                }
+                session.jump((long) (seconds * 1000));
+                feedback(player, "Текущее время: " + ReplaySession.formatTime(session.getClock()));
+                return true;
+            }
+            case "range":
+            case "отрезок": {
+                ReplaySession session = requireSession(player);
+                if (session == null) {
+                    return true;
+                }
+                if (args.length == 2 && args[1].equalsIgnoreCase("clear")) {
+                    session.clearRange();
+                    feedback(player, "Отрезок сброшен, воспроизводится вся запись.");
+                    return true;
+                }
+                if (args.length == 2 && (args[1].equalsIgnoreCase("a") || args[1].equalsIgnoreCase("start"))) {
+                    session.setRangeStartHere();
+                    feedback(player, "Начало отрезка: " + ReplaySession.formatTime(session.getRangeStart()));
+                    return true;
+                }
+                if (args.length == 2 && (args[1].equalsIgnoreCase("b") || args[1].equalsIgnoreCase("end"))) {
+                    session.setRangeEndHere();
+                    feedback(player, "Конец отрезка: " + ReplaySession.formatTime(session.getRangeEnd()));
+                    return true;
+                }
+                if (args.length < 3) {
+                    error(player, "Использование: /axv range <от> <до> или /axv range clear");
+                    return true;
+                }
+                long from = parseTime(args[1], -1L);
+                long to = parseTime(args[2], -1L);
+                if (from < 0 || to < 0) {
+                    error(player, "Неверные границы отрезка.");
+                    return true;
+                }
+                session.setRange(from, to);
+                feedback(player, "Отрезок: " + ReplaySession.formatTime(session.getRangeStart())
+                        + " — " + ReplaySession.formatTime(session.getRangeEnd()));
+                return true;
+            }
+            case "loop": {
+                ReplaySession session = requireSession(player);
+                if (session != null) {
+                    session.setLoop(!session.isLoop());
+                    feedback(player, session.isLoop() ? "↻ Повтор включён." : "↻ Повтор выключен.");
+                }
+                return true;
+            }
+            case "marker": {
+                ReplaySession session = requireSession(player);
+                if (session == null) {
+                    return true;
+                }
+                boolean forward = args.length < 2 || !args[1].equalsIgnoreCase("prev");
+                boolean moved = forward ? session.nextMarker() : session.previousMarker();
+                if (!moved) {
+                    error(player, forward ? "Следующих событий нет." : "Предыдущих событий нет.");
+                } else {
+                    feedback(player, "Переход к событию: " + ReplaySession.formatTime(session.getClock()));
+                }
+                return true;
+            }
+            case "camera":
+            case "камера": {
+                ReplaySession session = requireSession(player);
+                if (session == null) {
+                    return true;
+                }
+                CameraMode mode;
+                if (args.length < 2 || args[1].equalsIgnoreCase("cycle")) {
+                    mode = session.getCameraMode().next();
+                } else {
+                    mode = CameraMode.parse(args[1], null);
+                    if (mode == null) {
+                        error(player, "Режимы: first, third, free");
+                        return true;
+                    }
+                }
+                session.setCameraMode(mode);
+                feedback(player, "Камера: " + mode.getDisplayName());
+                return true;
+            }
+            case "timeline":
+            case "panel":
+            case "панель": {
+                ReplaySession session = requireSession(player);
+                if (session != null) {
+                    session.sendPanel();
+                }
+                return true;
+            }
+            case "follow":
+            case "кигроку": {
+                ReplaySession session = requireSession(player);
+                if (session != null) {
+                    session.followPlayer();
+                    feedback(player, "Камера перенесена к игроку.");
+                }
+                return true;
+            }
+            case "info": {
+                ReplaySession session = requireSession(player);
+                if (session != null) {
+                    sendSessionInfo(player, session);
+                }
+                return true;
+            }
             case "delete":
             case "remove":
+                if (!player.hasPermission("antixrayviewer.admin")) {
+                    error(player, "Нет прав.");
+                    return true;
+                }
                 if (args.length < 2) {
-                    player.sendMessage("§cИспользование: /" + label + " delete <id>");
+                    error(player, "Использование: /axv delete <id>");
                     return true;
                 }
                 handleDelete(player, args[1]);
-                break;
-                
-            case "stop":
-                handleStop(player);
-                break;
-                
+                return true;
             case "active":
                 handleActive(player);
-                break;
-                
+                return true;
             case "reload":
-            case "refresh":
-                handleReload(player);
-                break;
-                
+                if (!player.hasPermission("antixrayviewer.reload")) {
+                    error(player, "Нет прав.");
+                    return true;
+                }
+                plugin.reloadConfig();
+                recordingManager.reloadRecordings();
+                info(player, "Конфигурация и записи перезагружены.");
+                return true;
             case "help":
             default:
                 sendHelp(player);
-                break;
+                return true;
         }
-        
-        return true;
     }
-    
+
+    // ===================== Обработчики =====================
+
+    private ReplaySession requireSession(Player player) {
+        ReplaySession session = replayManager.get(player);
+        if (session == null) {
+            error(player, "Сначала откройте запись: /axv view <id>");
+        }
+        return session;
+    }
+
     private void handleList(Player player, int page) {
-        List<PlayerRecording> allRecordings = recordingManager.getCompletedRecordings();
-        
-        if (allRecordings.isEmpty()) {
-            player.sendMessage("§7Нет сохраненных записей.");
+        List<PlayerRecording> recordings = recordingManager.getCompletedRecordings();
+        if (recordings.isEmpty()) {
+            info(player, "Записей пока нет.");
             return;
         }
-        
-        // Сортируем записи от новых к старым (по ID в обратном порядке)
-        List<PlayerRecording> sortedRecordings = new ArrayList<>(allRecordings);
-        sortedRecordings.sort((r1, r2) -> Integer.compare(r2.getId(), r1.getId()));
-        
-        // Вычисляем пагинацию
-        int totalRecordings = sortedRecordings.size();
-        int totalPages = (int) Math.ceil((double) totalRecordings / RECORDINGS_PER_PAGE);
-        
-        // Проверяем корректность страницы
-        if (page < 1) page = 1;
-        if (page > totalPages) page = totalPages;
-        
-        // Вычисляем индексы для текущей страницы
-        int startIndex = (page - 1) * RECORDINGS_PER_PAGE;
-        int endIndex = Math.min(startIndex + RECORDINGS_PER_PAGE, totalRecordings);
-        
-        // Заголовок с номером страницы
-        player.sendMessage(String.format("§6═══════ §eЗаписи AntiXrayViewer §7[§f%d§7/§f%d§7] §6═══════", page, totalPages));
-        
-        // Отображаем записи текущей страницы
-        for (int i = startIndex; i < endIndex; i++) {
-            PlayerRecording recording = sortedRecordings.get(i);
-            Date date = new Date(recording.getStartTime());
-            String status = recording.getFrameCount() > 0 ? "§a✓" : "§c✗";
-            
-            // Создаем кликабельный ID для быстрого просмотра
-            TextComponent idComponent = new TextComponent(String.format("%s §7#§b%d", status, recording.getId()));
-            idComponent.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axv view " + recording.getId()));
-            idComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                new ComponentBuilder("§aНажмите для просмотра записи #" + recording.getId()).create()));
-            
-            // Остальная информация о записи
-            TextComponent infoComponent = new TextComponent(String.format(
-                " §7| §f%s §7| %s §7| Кадров: §e%d §7| §f%ds",
-                recording.getPlayerName(),
-                dateFormat.format(date),
-                recording.getFrameCount(),
-                recording.getDurationSeconds()
-            ));
-            
-            // Отправляем компоненты
-            idComponent.addExtra(infoComponent);
-            player.spigot().sendMessage(idComponent);
-            
-            // Причина на отдельной строке
-            player.sendMessage("  §7Причина: §e" + recording.getReason());
+
+        int totalPages = (recordings.size() + RECORDINGS_PER_PAGE - 1) / RECORDINGS_PER_PAGE;
+        int current = Math.max(1, Math.min(totalPages, page));
+        int start = (current - 1) * RECORDINGS_PER_PAGE;
+        int end = Math.min(recordings.size(), start + RECORDINGS_PER_PAGE);
+
+        player.sendMessage(Component.text("═══ Записи (стр. " + current + "/" + totalPages + ") ═══", NamedTextColor.GOLD)
+                .decorate(TextDecoration.BOLD));
+
+        for (int i = start; i < end; i++) {
+            PlayerRecording recording = recordings.get(i);
+            Component line = Component.text("#" + recording.getId() + " ", NamedTextColor.AQUA)
+                    .append(Component.text(recording.getPlayerName(), NamedTextColor.WHITE))
+                    .append(Component.text("  " + recording.getDurationSeconds() + "с", NamedTextColor.GRAY))
+                    .append(Component.text("  " + dateFormat.format(new Date(recording.getStartTime())), NamedTextColor.DARK_GRAY))
+                    .append(Component.text("  [Смотреть]", NamedTextColor.GREEN)
+                            .clickEvent(ClickEvent.runCommand("/axv view " + recording.getId()))
+                            .hoverEvent(HoverEvent.showText(Component.text("Причина: " + recording.getReason()))));
+            player.sendMessage(line);
         }
-        
-        player.sendMessage("§6════════════════════════════════════════");
-        
-        // Создаем навигационную панель
-        sendNavigationBar(player, page, totalPages);
-        
-        // Подсказка
-        player.sendMessage("§7Используйте §f/axv view <id> §7или кликните на ID");
+
+        Component nav = Component.empty();
+        if (current > 1) {
+            nav = nav.append(Component.text("[« Назад] ", NamedTextColor.YELLOW)
+                    .clickEvent(ClickEvent.runCommand("/axv list " + (current - 1))));
+        }
+        if (current < totalPages) {
+            nav = nav.append(Component.text("[Вперёд »]", NamedTextColor.YELLOW)
+                    .clickEvent(ClickEvent.runCommand("/axv list " + (current + 1))));
+        }
+        player.sendMessage(nav);
     }
-    
-    private void sendNavigationBar(Player player, int currentPage, int totalPages) {
-        TextComponent navigation = new TextComponent("");
-        
-        // Кнопка "Предыдущая страница"
-        if (currentPage > 1) {
-            TextComponent prevButton = new TextComponent("§a◀ Предыдущая ");
-            prevButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axv list " + (currentPage - 1)));
-            prevButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                new ComponentBuilder("§aПерейти на страницу " + (currentPage - 1)).create()));
-            navigation.addExtra(prevButton);
+
+    private void handleView(Player player, String idRaw) {
+        int id = parseInt(idRaw, -1);
+        if (id < 0) {
+            error(player, "ID должен быть числом.");
+            return;
+        }
+        PlayerRecording recording = recordingManager.getRecording(id);
+        if (recording == null) {
+            error(player, "Запись #" + id + " не найдена.");
+            return;
+        }
+        if (recording.getFrameCount() == 0) {
+            error(player, "В записи #" + id + " нет кадров.");
+            return;
+        }
+
+        ReplaySession session = replayManager.start(player, recording);
+        sendSessionInfo(player, session);
+    }
+
+    private void handleDelete(Player player, String idRaw) {
+        int id = parseInt(idRaw, -1);
+        if (id < 0) {
+            error(player, "ID должен быть числом.");
+            return;
+        }
+        if (recordingManager.deleteRecording(id)) {
+            info(player, "Запись #" + id + " удалена.");
         } else {
-            navigation.addExtra("§8◀ Предыдущая ");
-        }
-        
-        // Информация о текущей странице
-        navigation.addExtra(String.format("§7[§f%d§7/§f%d§7]", currentPage, totalPages));
-        
-        // Кнопка "Следующая страница"
-        if (currentPage < totalPages) {
-            TextComponent nextButton = new TextComponent(" §aСледующая ▶");
-            nextButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axv list " + (currentPage + 1)));
-            nextButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                new ComponentBuilder("§aПерейти на страницу " + (currentPage + 1)).create()));
-            navigation.addExtra(nextButton);
-        } else {
-            navigation.addExtra(" §8Следующая ▶");
-        }
-        
-        player.spigot().sendMessage(navigation);
-        
-        // Добавляем быстрый переход к страницам
-        if (totalPages > 5) {
-            TextComponent quickNav = new TextComponent("§7Быстрый переход: ");
-            
-            // Первая страница
-            if (currentPage != 1) {
-                TextComponent firstPage = new TextComponent("§e[1] ");
-                firstPage.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axv list 1"));
-                firstPage.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                    new ComponentBuilder("§aПерейти к первой странице").create()));
-                quickNav.addExtra(firstPage);
-            }
-            
-            // Показываем несколько страниц вокруг текущей
-            int start = Math.max(2, currentPage - 2);
-            int end = Math.min(totalPages - 1, currentPage + 2);
-            
-            for (int i = start; i <= end; i++) {
-                if (i == currentPage) {
-                    quickNav.addExtra("§f[" + i + "] ");
-                } else {
-                    TextComponent pageLink = new TextComponent("§e[" + i + "] ");
-                    pageLink.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axv list " + i));
-                    pageLink.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                        new ComponentBuilder("§aПерейти на страницу " + i).create()));
-                    quickNav.addExtra(pageLink);
-                }
-            }
-            
-            // Последняя страница
-            if (currentPage != totalPages) {
-                TextComponent lastPage = new TextComponent("§e[" + totalPages + "]");
-                lastPage.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/axv list " + totalPages));
-                lastPage.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                    new ComponentBuilder("§aПерейти к последней странице").create()));
-                quickNav.addExtra(lastPage);
-            }
-            
-            player.spigot().sendMessage(quickNav);
+            error(player, "Запись #" + id + " не найдена.");
         }
     }
-    
-    private void handleView(Player player, String idStr) {
-        try {
-            int id = Integer.parseInt(idStr);
-            PlayerRecording recording = recordingManager.getRecording(id);
-            
-            if (recording == null) {
-                player.sendMessage("§cЗапись с ID #" + id + " не найдена!");
-                return;
-            }
-            
-            if (recording.getFrameCount() == 0) {
-                player.sendMessage("§cЗапись пуста!");
-                return;
-            }
-            
-            // Останавливаем предыдущую сессию воспроизведения, если есть
-            stopReplay(player);
-            
-            // Создаем сессию воспроизведения
-            ReplaySession session = new ReplaySession(plugin, player, recording);
-            replaySessions.put(player.getUniqueId(), session);
-            
-            player.sendMessage("§a▶ Начинаю воспроизведение записи #" + id);
-            player.sendMessage("§7Игрок: §f" + recording.getPlayerName());
-            player.sendMessage("§7Причина: §e" + recording.getReason());
-            player.sendMessage("§7Длительность: §f" + recording.getDurationSeconds() + " секунд");
-            player.sendMessage("§7Используйте §f/axv stop §7для остановки");
-            
-            session.start();
-            
-        } catch (NumberFormatException e) {
-            player.sendMessage("§cНеверный ID записи!");
-        }
-    }
-    
-    private void handleDelete(Player player, String idStr) {
-        try {
-            int id = Integer.parseInt(idStr);
-            
-            if (recordingManager.deleteRecording(id)) {
-                player.sendMessage("§aЗапись #" + id + " успешно удалена!");
-            } else {
-                player.sendMessage("§cЗапись с ID #" + id + " не найдена!");
-            }
-            
-        } catch (NumberFormatException e) {
-            player.sendMessage("§cНеверный ID записи!");
-        }
-    }
-    
-    private void handleStop(Player player) {
-        if (stopReplay(player)) {
-            player.sendMessage("§aВоспроизведение остановлено.");
-        } else {
-            player.sendMessage("§7Вы не просматриваете запись.");
-        }
-    }
-    
+
     private void handleActive(Player player) {
         Map<UUID, PlayerRecording> active = recordingManager.getActiveRecordings();
-        
-        if (active.isEmpty()) {
-            player.sendMessage("§7Нет активных записей.");
-            return;
-        }
-        
-        player.sendMessage("§6═══════ §eАктивные записи §6═══════");
-        
+        player.sendMessage(Component.text("Активные записи: " + active.size()
+                + " | Активные просмотры: " + replayManager.getActiveCount(), NamedTextColor.GOLD));
         for (PlayerRecording recording : active.values()) {
-            int seconds = recording.getDurationSeconds();
-            player.sendMessage(String.format(
-                "§c● §f%s §7- записывается %ds (кадров: %d)",
-                recording.getPlayerName(),
-                seconds,
-                recording.getFrameCount()
-            ));
-            player.sendMessage("  §7Причина: §e" + recording.getReason());
+            player.sendMessage(Component.text(" • " + recording.getPlayerName() + " — " + recording.getReason(),
+                    NamedTextColor.GRAY));
         }
-        
-        player.sendMessage("§6═════════════════════════════════");
     }
-    
-    private void handleReload(Player player) {
-        player.sendMessage("§eПерезагружаю записи из файлов...");
-        
-        // Синхронизируем с файловой системой
-        recordingManager.syncRecordingsWithFileSystem();
-        
-        // Или полностью перезагружаем из файлов
-        // recordingManager.reloadRecordings();
-        
-        List<PlayerRecording> recordings = recordingManager.getCompletedRecordings();
-        player.sendMessage("§aЗаписи синхронизированы! Загружено: §f" + recordings.size() + " §aзаписей.");
+
+    private void sendSessionInfo(Player player, ReplaySession session) {
+        ReplayTimeline timeline = session.getTimeline();
+        player.sendMessage(Component.text("Запись #" + session.getRecording().getId()
+                + " | Длительность: " + ReplaySession.formatTime(timeline.getDuration())
+                + " | Кадров: " + timeline.getFrameCount()
+                + " | Изменений блоков: " + timeline.getDeltas().size()
+                + " | Руды: " + timeline.getOreBreakCount(), NamedTextColor.DARK_AQUA));
     }
-    
-    private boolean stopReplay(Player player) {
-        ReplaySession session = replaySessions.remove(player.getUniqueId());
-        if (session != null) {
-            session.stop();
-            return true;
-        }
-        return false;
-    }
-    
+
     private void sendHelp(Player player) {
-        player.sendMessage("§6═══════════ §eAntiXrayViewer §6═══════════");
-        player.sendMessage("§f/axv list [страница] §7- список всех записей");
-        player.sendMessage("§f/axv view <id> §7- просмотреть запись");
-        player.sendMessage("§f/axv delete <id> §7- удалить запись");
-        player.sendMessage("§f/axv stop §7- остановить просмотр");
-        player.sendMessage("§f/axv active §7- активные записи");
-        player.sendMessage("§f/axv reload §7- синхронизировать записи");
-        player.sendMessage("§f/axv help §7- показать эту справку");
-        player.sendMessage("§6═════════════════════════════════════");
+        player.sendMessage(Component.text("═══ AntiXrayViewer ═══", NamedTextColor.GOLD).decorate(TextDecoration.BOLD));
+        help(player, "/axv list [стр]", "список записей");
+        help(player, "/axv view <id>", "открыть запись");
+        help(player, "/axv pause", "пауза / продолжить");
+        help(player, "/axv seek <сек|м:сс>", "перейти на время");
+        help(player, "/axv jump <±сек>", "пролистать вперёд/назад");
+        help(player, "/axv range <от> <до>", "воспроизводить только отрезок");
+        help(player, "/axv loop", "повтор отрезка");
+        help(player, "/axv speed <x>", "скорость (отрицательная = назад)");
+        help(player, "/axv marker next|prev", "прыжок к добыче руды");
+        help(player, "/axv camera <first|third|free>", "режим камеры");
+        help(player, "/axv follow", "перенести свободную камеру к игроку");
+        help(player, "/axv range a|b|clear", "отметить отрезок по текущему времени");
+        help(player, "/axv panel", "панель управления с кнопками");
+        help(player, "/axv stop", "завершить просмотр");
+        help(player, "/axv active", "активные записи и просмотры");
+        if (player.hasPermission("antixrayviewer.admin")) {
+            help(player, "/axv delete <id>", "удалить запись");
+        }
+        if (player.hasPermission("antixrayviewer.reload")) {
+            help(player, "/axv reload", "перезагрузить конфиг");
+        }
     }
-    
+
+    private void help(Player player, String command, String description) {
+        player.sendMessage(Component.text(command, NamedTextColor.YELLOW)
+                .append(Component.text(" — " + description, NamedTextColor.GRAY)));
+    }
+
+    /**
+     * Ответ на нажатие кнопки панели — в action bar над хотбаром, а не в чат.
+     * Так при активной перемотке чат не забивается и репорты игроков остаются видны.
+     */
+    private void feedback(Player player, String message) {
+        player.sendActionBar(Component.text(message, NamedTextColor.AQUA));
+    }
+
+    private void info(Player player, String message) {
+        player.sendMessage(Component.text("[AXV] ", NamedTextColor.AQUA)
+                .append(Component.text(message, NamedTextColor.WHITE)));
+    }
+
+    private void error(Player player, String message) {
+        player.sendMessage(Component.text("[AXV] ", NamedTextColor.RED)
+                .append(Component.text(message, NamedTextColor.GRAY)));
+    }
+
+    // ===================== Парсеры =====================
+
+    private static int parseInt(String raw, int fallback) {
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    private static double parseDouble(String raw, double fallback) {
+        try {
+            return Double.parseDouble(raw.trim().replace(',', '.'));
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /**
+     * Понимает форматы: 45, 45s, 1:30, 2m10s.
+     *
+     * @return время в миллисекундах или fallback
+     */
+    private static long parseTime(String raw, long fallback) {
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        String value = raw.trim().toLowerCase(Locale.ROOT);
+
+        if (value.contains(":")) {
+            String[] parts = value.split(":");
+            if (parts.length != 2) {
+                return fallback;
+            }
+            int minutes = parseInt(parts[0], -1);
+            int seconds = parseInt(parts[1], -1);
+            if (minutes < 0 || seconds < 0) {
+                return fallback;
+            }
+            return (minutes * 60L + seconds) * 1000L;
+        }
+
+        if (value.contains("m") || value.contains("s")) {
+            long total = 0L;
+            StringBuilder number = new StringBuilder();
+            for (char c : value.toCharArray()) {
+                if (Character.isDigit(c) || c == '.') {
+                    number.append(c);
+                } else if (c == 'm') {
+                    total += (long) (parseDouble(number.toString(), 0) * 60000);
+                    number.setLength(0);
+                } else if (c == 's') {
+                    total += (long) (parseDouble(number.toString(), 0) * 1000);
+                    number.setLength(0);
+                }
+            }
+            if (number.length() > 0) {
+                total += (long) (parseDouble(number.toString(), 0) * 1000);
+            }
+            return total;
+        }
+
+        double seconds = parseDouble(value, Double.NaN);
+        if (Double.isNaN(seconds) || seconds < 0) {
+            return fallback;
+        }
+        return (long) (seconds * 1000);
+    }
+
+    // ===================== Автодополнение =====================
+
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (!sender.hasPermission("antixrayviewer.admin")) {
-            return Collections.emptyList();
-        }
-        
+        List<String> result = new ArrayList<>();
         if (args.length == 1) {
-            return Arrays.asList("list", "view", "delete", "stop", "active", "reload", "help")
-                    .stream()
-                    .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
-                    .collect(Collectors.toList());
-        }
-        
-        if (args.length == 2) {
-            if (args[0].equalsIgnoreCase("list")) {
-                // Предлагаем номера страниц
-                List<PlayerRecording> recordings = recordingManager.getCompletedRecordings();
-                int totalPages = (int) Math.ceil((double) recordings.size() / RECORDINGS_PER_PAGE);
-                List<String> pages = new ArrayList<>();
-                for (int i = 1; i <= totalPages; i++) {
-                    pages.add(String.valueOf(i));
+            for (String candidate : Arrays.asList("list", "view", "stop", "pause", "speed", "seek", "jump", "range",
+                    "loop", "marker", "camera", "follow", "panel", "timeline", "info", "active", "delete", "reload",
+                    "help")) {
+                if (candidate.startsWith(args[0].toLowerCase(Locale.ROOT))) {
+                    result.add(candidate);
                 }
-                return pages.stream()
-                        .filter(s -> s.startsWith(args[1]))
-                        .collect(Collectors.toList());
-            } else if (args[0].equalsIgnoreCase("view") || args[0].equalsIgnoreCase("play")) {
-                // Предлагаем ID записей
-                return recordingManager.getCompletedRecordings().stream()
-                        .map(r -> String.valueOf(r.getId()))
-                        .filter(s -> s.startsWith(args[1]))
-                        .collect(Collectors.toList());
-            } else if (args[0].equalsIgnoreCase("delete")) {
-                // Предлагаем ID записей
-                return recordingManager.getCompletedRecordings().stream()
-                        .map(r -> String.valueOf(r.getId()))
-                        .filter(s -> s.startsWith(args[1]))
-                        .collect(Collectors.toList());
+            }
+            return result;
+        }
+
+        String sub = args[0].toLowerCase(Locale.ROOT);
+        if (args.length == 2) {
+            switch (sub) {
+                case "view":
+                case "delete":
+                case "remove":
+                    for (PlayerRecording recording : recordingManager.getCompletedRecordings()) {
+                        result.add(String.valueOf(recording.getId()));
+                    }
+                    return result;
+                case "speed":
+                    return Arrays.asList("0.25", "0.5", "1", "2", "4", "8", "-1", "-2");
+                case "jump":
+                    return Arrays.asList("-30", "-10", "-3", "3", "10", "30");
+                case "marker":
+                    return Arrays.asList("next", "prev");
+                case "camera":
+                    return Arrays.asList("first", "third", "free", "cycle");
+                case "range":
+                    return Arrays.asList("a", "b", "clear", "0", "0:30", "1:00");
+                case "seek":
+                    return Arrays.asList("0", "0:30", "1:00", "2:00");
+                default:
+                    return result;
             }
         }
-        
-        return Collections.emptyList();
-    }
-    
-    public void stopAllReplays() {
-        for (ReplaySession session : replaySessions.values()) {
-            session.stop();
+
+        if (args.length == 3 && sub.equals("range")) {
+            return Arrays.asList("0:30", "1:00", "2:00", "3:00");
         }
-        replaySessions.clear();
+        return result;
     }
 }

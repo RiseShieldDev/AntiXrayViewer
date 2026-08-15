@@ -43,3 +43,30 @@ settings:
   persist-recordings: false
   # Отображать прогресс записи в action bar игроку (для отладки)
   debug-mode: false
+# ========== Настройки воспроизведения (v1.6.0) ==========
+replay:
+  camera:
+    # Режим камеры по умолчанию: FIRST_PERSON, THIRD_PERSON, FREE_LOOK
+    #   FIRST_PERSON — глаза игрока и его взгляд (рекомендуется)
+    #   THIRD_PERSON — камера за спиной, видна модель игрока
+    #   FREE_LOOK — свободный полёт, плагин вас не двигает вообще
+    default-mode: FIRST_PERSON
+    # Сглаживание движения камеры: 0 = жёстко по записи, 0.9 = очень плавно
+    smoothing: 0.35
+    # Дистанция камеры в режиме от третьего лица (блоки)
+    third-person-distance: 4.0
+    # Показывать модель записанного игрока (видна ТОЛЬКО зрителю)
+    show-avatar: true
+  performance:
+    # Максимум обновлений блоков на тик (защита от лаг-спайков при перемотке)
+    block-updates-per-tick: 256
+    # Радиус отправки виртуальных блоков (блоки)
+    block-render-distance: 96.0
+    # Радиус анимации трещин, частиц и звуков (блоки)
+    break-animation-distance: 48.0
+  playback:
+    default-speed: 1.0
+    max-speed: 8.0
+    # Частицы и звуки разрушения — отправляются ТОЛЬКО зрителю
+    particles: true
+    sounds: true

@@ -200,20 +200,28 @@ public class RecordingManager implements Listener {
      * Сохранить запись в хранилище
      */
     private void saveRecording(PlayerRecording recording) {
-        // Сохраняем в файл
-        boolean saved = storage.saveRecording(recording);
-        if (!saved) {
-            plugin.getLogger().severe("Запись #" + recording.getId() + " не была добавлена в список, потому что файл не сохранился");
-            return;
-        }
-        
-        completedRecordings.add(0, recording); // Добавляем в начало списка
+        // Запись сразу попадает в список, чтобы её можно было смотреть без ожидания диска
+        completedRecordings.add(0, recording);
         
         // Ограничиваем количество сохраненных записей
+        java.util.List<Integer> toDelete = new java.util.ArrayList<>();
         while (completedRecordings.size() > maxSavedRecordings) {
             PlayerRecording removed = completedRecordings.remove(completedRecordings.size() - 1);
-            storage.deleteRecording(removed.getId());
+            toDelete.add(removed.getId());
         }
+        
+        // Запись на диск выполняется АСИНХРОННО: раньше сериализация тысяч кадров
+        // происходила в основном потоке и вызывала фриз сервера в момент завершения записи
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            boolean saved = storage.saveRecording(recording);
+            if (!saved) {
+                plugin.getLogger().severe("Запись #" + recording.getId() + " не сохранилась на диск");
+                plugin.getServer().getScheduler().runTask(plugin, () -> completedRecordings.remove(recording));
+            }
+            for (Integer id : toDelete) {
+                storage.deleteRecording(id);
+            }
+        });
     }
     
     /**
@@ -348,7 +356,9 @@ public class RecordingManager implements Listener {
             block.getWorld().getName(),
             block.getType(),
             0.1f,
-            player.getEntityId()
+            player.getEntityId(),
+            block.getBlockData().getAsString(),
+            null
         );
         
         pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
@@ -382,14 +392,18 @@ public class RecordingManager implements Listener {
             block.getY(),
             block.getZ(),
             block.getWorld().getName(),
-            block.getType()
+            block.getType(),
+            0.0f,
+            player.getEntityId(),
+            block.getBlockData().getAsString(),
+            null
         );
         
         pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
     }
     
     /**
-     * Обработка полного ломания блока
+     * Обр��ботка полного ломания блока
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
@@ -418,7 +432,11 @@ public class RecordingManager implements Listener {
             block.getWorld().getName(),
             block.getType(),
             1.0f,
-            player.getEntityId()
+            player.getEntityId(),
+            // Сохраняем ПОЛНОЕ состояние блока (поворот, waterlogged и т.д.),
+            // а не только Material — иначе при воспроизведении блоки выглядят неверно
+            block.getBlockData().getAsString(),
+            null
         );
         
         pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);
@@ -447,7 +465,10 @@ public class RecordingManager implements Listener {
             block.getWorld().getName(),
             block.getType(),
             1.0f,
-            player.getEntityId()
+            player.getEntityId(),
+            block.getBlockData().getAsString(),
+            // Состояние до установки — нужно для перемотки назад
+            event.getBlockReplacedState().getBlockData().getAsString()
         );
         
         pendingBlockEvents.computeIfAbsent(playerId, k -> new ArrayList<>()).add(blockEvent);

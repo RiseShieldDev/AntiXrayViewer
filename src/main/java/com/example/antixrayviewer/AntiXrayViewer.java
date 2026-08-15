@@ -3,6 +3,7 @@ package com.example.antixrayviewer;
 import com.example.antixrayviewer.commands.AntiXrayViewerCommand;
 import com.example.antixrayviewer.listeners.OreBreakListener;
 import com.example.antixrayviewer.managers.RecordingManager;
+import com.example.antixrayviewer.replay.ReplayManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -12,6 +13,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 public class AntiXrayViewer extends JavaPlugin {
     
     private RecordingManager recordingManager;
+    private ReplayManager replayManager;
     private AntiXrayViewerCommand commandHandler;
 
     @Override
@@ -22,6 +24,7 @@ public class AntiXrayViewer extends JavaPlugin {
         
         // Инициализируем менеджеры
         recordingManager = new RecordingManager(this);
+        replayManager = new ReplayManager(this);
         
         // Регистрируем слушатели событий
         getServer().getPluginManager().registerEvents(
@@ -29,8 +32,11 @@ public class AntiXrayViewer extends JavaPlugin {
             this
         );
         
+        // Слушатель просмотров: гарантирует очистку виртуальных блоков и камеры
+        getServer().getPluginManager().registerEvents(replayManager, this);
+        
         // Регистрируем команды
-        commandHandler = new AntiXrayViewerCommand(this, recordingManager);
+        commandHandler = new AntiXrayViewerCommand(this, recordingManager, replayManager);
         getCommand("antixrayviewer").setExecutor(commandHandler);
         getCommand("antixrayviewer").setTabCompleter(commandHandler);
         
@@ -60,9 +66,9 @@ public class AntiXrayViewer extends JavaPlugin {
             recordingManager.stopAllRecordings();
         }
         
-        // Останавливаем все воспроизведения
-        if (commandHandler != null) {
-            commandHandler.stopAllReplays();
+        // Останавливаем все воспроизведения и возвращаем зрителям реальный мир
+        if (replayManager != null) {
+            replayManager.stopAll();
         }
         
         getLogger().info("╔════════════════════════════════════╗");
@@ -88,6 +94,21 @@ public class AntiXrayViewer extends JavaPlugin {
         config.addDefault("recording.interval-ticks", 2);
         config.addDefault("recording.max-saved", 50);
         
+        // Настройки воспроизведения и камеры
+        config.addDefault("replay.camera.default-mode", "FIRST_PERSON");
+        config.addDefault("replay.camera.smoothing", 0.35);
+        config.addDefault("replay.camera.third-person-distance", 4.0);
+        config.addDefault("replay.camera.show-avatar", true);
+        
+        config.addDefault("replay.performance.block-updates-per-tick", 256);
+        config.addDefault("replay.performance.block-render-distance", 96.0);
+        config.addDefault("replay.performance.break-animation-distance", 48.0);
+        
+        config.addDefault("replay.playback.default-speed", 1.0);
+        config.addDefault("replay.playback.max-speed", 8.0);
+        config.addDefault("replay.playback.particles", true);
+        config.addDefault("replay.playback.sounds", true);
+        
         config.addDefault("notifications.admin-alerts", true);
         config.addDefault("notifications.console-logging", true);
         
@@ -101,5 +122,9 @@ public class AntiXrayViewer extends JavaPlugin {
     
     public RecordingManager getRecordingManager() {
         return recordingManager;
+    }
+    
+    public ReplayManager getReplayManager() {
+        return replayManager;
     }
 }
